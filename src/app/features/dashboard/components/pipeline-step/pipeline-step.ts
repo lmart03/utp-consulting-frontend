@@ -8,6 +8,7 @@ import {
   LucideIconData,
   Mail,
   MailCheck,
+  MessageSquareReply,
   Minus,
   Sparkles,
   Ticket,
@@ -27,6 +28,7 @@ const STEP_ICONS: Record<StepKey, LucideIconData> = {
   crm: Contact,
   jira: Ticket,
   calendar: CalendarDays,
+  reply: MessageSquareReply,
   markRead: MailCheck,
   done: CircleCheck,
 };

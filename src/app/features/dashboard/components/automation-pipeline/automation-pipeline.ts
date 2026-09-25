@@ -1,5 +1,5 @@
 import { NgTemplateOutlet } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import {
   Building2,
   CalendarDays,
@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Inbox,
   LucideAngularModule,
+  MessageSquareReply,
   Sparkles,
   Ticket,
   UserRound,
@@ -35,8 +36,23 @@ export class AutomationPipelineComponent {
   readonly loading = input(false);
   /** card: tarjeta "Procesando ahora" del dashboard. drawer: contenido del detalle (siempre vertical). */
   readonly variant = input<'card' | 'drawer'>('card');
+  /** Abrir el detalle del correo para revisar y enviar la respuesta sugerida. */
+  readonly reviewReply = output<number>();
 
-  protected readonly icons = { Building2, CalendarDays, CircleAlert, CircleCheck, Clock, Contact, ExternalLink, Inbox, Sparkles, Ticket, UserRound };
+  protected readonly icons = {
+    Building2,
+    CalendarDays,
+    CircleAlert,
+    CircleCheck,
+    Clock,
+    Contact,
+    ExternalLink,
+    Inbox,
+    MessageSquareReply,
+    Sparkles,
+    Ticket,
+    UserRound,
+  };
   protected readonly fieldLabels = PROSPECT_FIELD_LABELS;
   protected readonly formatTime = formatTime;
   protected readonly formatDay = formatDay;
@@ -80,14 +96,18 @@ export class AutomationPipelineComponent {
 
   protected readonly resultCount = computed(() => {
     const p = this.process();
-    return p ? [p.crm, p.jira, p.meeting].filter(Boolean).length : 0;
+    return p ? [p.crm, p.jira, p.meeting, this.isDrawer() ? null : p.reply].filter(Boolean).length : 0;
   });
 
   protected readonly resultsGridClass = computed(() => {
     if (this.isDrawer()) {
       return 'mt-6 grid gap-3';
     }
-    return this.resultCount() >= 3 ? 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3' : 'mt-6 grid gap-3 sm:grid-cols-2';
+    const count = this.resultCount();
+    if (count >= 4) {
+      return 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4';
+    }
+    return count === 3 ? 'mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3' : 'mt-6 grid gap-3 sm:grid-cols-2';
   });
 
   protected missingText(fields: string[]): string {
@@ -96,5 +116,13 @@ export class AutomationPipelineComponent {
 
   protected readonly duration = computed(() => formatDuration(this.process()?.elapsedMs));
 
-  protected readonly stepsListClass = computed(() => (this.isDrawer() ? 'grid grid-cols-1' : 'grid grid-cols-1 lg:grid-cols-7 lg:gap-1'));
+  protected readonly stepsListClass = computed(() => (this.isDrawer() ? 'grid grid-cols-1' : 'grid grid-cols-1 lg:grid-cols-8 lg:gap-1'));
+
+  protected readonly replyLabel: Record<string, string> = {
+    DRAFT: 'Lista para revisar',
+    SENDING: 'Enviando…',
+    SENT: 'Enviada',
+    DISCARDED: 'Descartada',
+    FAILED: 'No se pudo redactar',
+  };
 }

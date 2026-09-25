@@ -3,17 +3,14 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { Observable, catchError, finalize, map, of, switchMap, tap } from 'rxjs';
 
 import { API_BASE_URL, GOOGLE_LOGIN_URL } from '@core/config/app-config';
+import { CsrfService } from '@core/services/csrf.service';
 import { AuthUser } from '@shared/models/auth-user.model';
-
-interface CsrfToken {
-  headerName: string;
-  token: string;
-}
 
 /** Sesión Google del usuario (global). El login/logout real lo gestiona Spring Security. */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly csrf = inject(CsrfService);
 
   private readonly _user = signal<AuthUser | null>(null);
   readonly user = this._user.asReadonly();
@@ -37,13 +34,8 @@ export class AuthService {
 
   /** POST /logout de Spring Security (requiere token CSRF). Siempre limpia la sesión local. */
   logout(): Observable<void> {
-    return this.http.get<CsrfToken>(`${API_BASE_URL}/api/auth/csrf`).pipe(
-      switchMap((csrf) =>
-        this.http.post(`${API_BASE_URL}/logout`, null, {
-          headers: { [csrf.headerName]: csrf.token },
-          responseType: 'text',
-        }),
-      ),
+    return this.csrf.headers().pipe(
+      switchMap((headers) => this.http.post(`${API_BASE_URL}/logout`, null, { headers, responseType: 'text' })),
       map(() => undefined),
       catchError(() => of(undefined)),
       finalize(() => this._user.set(null)),

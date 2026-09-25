@@ -1,4 +1,5 @@
 import { EmailAction } from './email-action.model';
+import { EmailReply, ReplyStatus } from './email-reply.model';
 
 export type ProcessedEmailStatus = 'PROCESSING' | 'PROCESSED' | 'PARTIAL' | 'FAILED' | 'IGNORED';
 
@@ -25,6 +26,8 @@ export interface ProcessedEmail {
   crmProspectId?: number;
   crmContactName?: string;
   crmStatus?: string;
+  replyId?: number;
+  replyStatus?: ReplyStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -33,4 +36,5 @@ export interface ProcessedEmail {
 export interface ProcessedEmailDetail {
   email: ProcessedEmail;
   actions: EmailAction[];
+  reply?: EmailReply;
 }

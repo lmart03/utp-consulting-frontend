@@ -97,7 +97,7 @@
     </ol>
 
     <!-- Resultados: Jira y Calendar -->
-    @if (p.crm || p.jira || p.meeting) {
+    @if (p.crm || p.jira || p.meeting || (p.reply && !isDrawer())) {
       <div [class]="resultsGridClass()">
         @if (p.crm; as crm) {
           <div class="flex animate-fade-in-up items-start gap-3 rounded-xl border border-slate-200 p-4 transition-shadow duration-200 hover:shadow-sm">
@@ -174,6 +174,26 @@
                 <lucide-icon [img]="icons.ExternalLink" class="size-3.5" />
               </a>
             }
+          </div>
+        }
+        @if (!isDrawer() && p.reply; as reply) {
+          <div class="flex animate-fade-in-up items-start gap-3 rounded-xl border border-slate-200 p-4 transition-shadow duration-200 hover:shadow-sm">
+            <span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <lucide-icon [img]="icons.MessageSquareReply" class="size-5" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs text-slate-400">Respuesta sugerida · {{ replyLabel[reply.status] }}</p>
+              <p class="line-clamp-2 text-sm text-slate-700" [title]="reply.body ?? ''">{{ reply.body || reply.errorMessage || '—' }}</p>
+              @if (p.processedEmailId != null && reply.status !== 'DISCARDED') {
+                <button
+                  type="button"
+                  (click)="reviewReply.emit(p.processedEmailId)"
+                  class="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+                >
+                  {{ reply.status === 'SENT' ? 'Ver respuesta' : 'Revisar y enviar' }}
+                </button>
+              }
+            </div>
           </div>
         }
       </div>

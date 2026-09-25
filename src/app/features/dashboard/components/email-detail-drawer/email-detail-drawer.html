@@ -76,6 +76,19 @@
         <app-automation-pipeline variant="drawer" [process]="process()" [loading]="loading()" />
       </div>
 
+      @if (process()?.reply; as reply) {
+        <div class="mt-6">
+          <app-reply-composer
+            [reply]="reply"
+            [busy]="replyBusy()"
+            [error]="replyError()"
+            (send)="sendReply.emit({ reply, body: $event })"
+            (regenerate)="regenerateReply.emit(reply)"
+            (discard)="discardReply.emit(reply)"
+          />
+        </div>
+      }
+
       @if (process(); as p) {
         <div class="mt-8 border-t border-slate-100 pt-6">
           <app-activity-timeline [items]="p.timeline" [bare]="true" [limit]="30" />

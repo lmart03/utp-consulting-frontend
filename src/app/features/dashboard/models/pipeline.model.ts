@@ -1,11 +1,12 @@
+import { EmailReply } from './email-reply.model';
 import { ProcessedEmailStatus } from './processed-email.model';
 import { ProspectField, ProspectStatus } from './prospect.model';
 
 /** Modelos de vista del pipeline: se construyen desde eventos WebSocket o desde el detalle REST. */
-export type StepKey = 'gmail' | 'gemini' | 'crm' | 'jira' | 'calendar' | 'markRead' | 'done';
+export type StepKey = 'gmail' | 'gemini' | 'crm' | 'jira' | 'calendar' | 'reply' | 'markRead' | 'done';
 export type StepStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
 
-export const STEP_ORDER: readonly StepKey[] = ['gmail', 'gemini', 'crm', 'jira', 'calendar', 'markRead', 'done'];
+export const STEP_ORDER: readonly StepKey[] = ['gmail', 'gemini', 'crm', 'jira', 'calendar', 'reply', 'markRead', 'done'];
 
 export const STEP_LABELS: Record<StepKey, string> = {
   gmail: 'Gmail',
@@ -13,6 +14,7 @@ export const STEP_LABELS: Record<StepKey, string> = {
   crm: 'CRM',
   jira: 'Jira',
   calendar: 'Calendar',
+  reply: 'Respuesta',
   markRead: 'Gmail leído',
   done: 'Completado',
 };
@@ -77,6 +79,8 @@ export interface EmailProcess {
   crm?: CrmResult;
   jira?: JiraResult;
   meeting?: MeetingResult;
+  /** Respuesta sugerida por la IA (borrador, enviada, descartada o fallida). */
+  reply?: EmailReply;
   /** true si se está siguiendo en tiempo real por WebSocket. */
   live: boolean;
 }

@@ -55,7 +55,11 @@
   }
 
   <!-- Pipeline en tiempo real (foco principal) -->
-  <app-automation-pipeline [process]="store.activeProcess()" [loading]="store.loading()" />
+  <app-automation-pipeline
+    [process]="store.activeProcess()"
+    [loading]="store.loading()"
+    (reviewReply)="store.openDetail($event)"
+  />
 
   <!-- Actividad + Integraciones -->
   <div class="grid gap-6 sm:gap-8 lg:grid-cols-3">
@@ -88,7 +92,12 @@
   [process]="store.selectedProcess()"
   [email]="store.selectedEmail()"
   [loading]="store.detailLoading()"
+  [replyBusy]="store.replyBusy()"
+  [replyError]="store.replyError()"
   (closed)="store.closeDetail()"
+  (sendReply)="store.sendReply($event.reply, $event.body)"
+  (regenerateReply)="store.regenerateReply($event)"
+  (discardReply)="store.discardReply($event)"
 />
 
 <app-prospect-drawer

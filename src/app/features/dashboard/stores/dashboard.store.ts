@@ -1,12 +1,14 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Observable, Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 
 import { isToday } from '@shared/utils/date-format';
 
 import { AutomationEvent, FINAL_STAGES } from '../models/automation-event.model';
 import { AutomationStatus, IntegrationsStatus, LiveConnectionState } from '../models/automation-status.model';
 import { DashboardKpi } from '../models/dashboard-kpi.model';
+import { EmailReply, ReplyAction } from '../models/email-reply.model';
 import { CALENDAR_TOOL, CRM_TOOL, JIRA_TOOL } from '../models/email-action.model';
 import { EmailProcess } from '../models/pipeline.model';
 import { ProcessedEmail } from '../models/processed-email.model';
@@ -14,7 +16,8 @@ import { Prospect, ProspectDetail } from '../models/prospect.model';
 import { AutomationApiService } from '../services/automation-api.service';
 import { AutomationWebsocketService } from '../services/automation-websocket.service';
 import { CrmApiService } from '../services/crm-api.service';
-import { applyEvent, createProcess, processFromDetail, processKey } from '../utils/pipeline-builder';
+import { ReplyApiService } from '../services/reply-api.service';
+import { applyEvent, createProcess, processFromDetail, processKey, withReply } from '../utils/pipeline-builder';
 
 /**
  * Estado del dashboard. REST da la carga inicial; el WebSocket solo aplica cambios nuevos sobre el correo
@@ -25,6 +28,7 @@ export class DashboardStore {
   private readonly api = inject(AutomationApiService);
   private readonly socket = inject(AutomationWebsocketService);
   private readonly crmApi = inject(CrmApiService);
+  private readonly replyApi = inject(ReplyApiService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly _status = signal<AutomationStatus | null>(null);
@@ -47,6 +51,8 @@ export class DashboardStore {
   private readonly _selectedProspectId = signal<number | null>(null);
   private readonly _selectedProspect = signal<ProspectDetail | null>(null);
   private readonly _prospectLoading = signal(false);
+  private readonly _replyBusy = signal<ReplyAction | null>(null);
+  private readonly _replyError = signal<string | null>(null);
   private readonly searchTerms = new Subject<string>();
 
   readonly status = this._status.asReadonly();
@@ -64,6 +70,8 @@ export class DashboardStore {
   readonly selectedProspect = this._selectedProspect.asReadonly();
   readonly prospectLoading = this._prospectLoading.asReadonly();
   readonly prospectDrawerOpen = computed(() => this._selectedProspectId() !== null);
+  readonly replyBusy = this._replyBusy.asReadonly();
+  readonly replyError = this._replyError.asReadonly();
 
   readonly systemActive = computed(() => this._status()?.enabled ?? false);
   readonly connectedAccount = computed(() => this._status()?.googleAccount ?? null);
@@ -191,7 +199,66 @@ export class DashboardStore {
       });
   }
 
+  // ---- Respuesta sugerida (el usuario decide: enviar, regenerar o descartar) ----
+
+  sendReply(reply: EmailReply, body: string): void {
+    this.runReplyAction('send', reply, this.replyApi.send(reply.id, body));
+  }
+
+  regenerateReply(reply: EmailReply): void {
+    this.runReplyAction('regenerate', reply, this.replyApi.regenerate(reply.id));
+  }
+
+  discardReply(reply: EmailReply): void {
+    this.runReplyAction('discard', reply, this.replyApi.discard(reply.id));
+  }
+
+  private runReplyAction(action: ReplyAction, reply: EmailReply, request: Observable<EmailReply>): void {
+    if (this._replyBusy()) {
+      return;
+    }
+    this._replyBusy.set(action);
+    this._replyError.set(null);
+    request.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (updated) => {
+        this.applyReply(updated);
+        this._replyBusy.set(null);
+      },
+      error: (err: HttpErrorResponse) => {
+        this._replyBusy.set(null);
+        this._replyError.set(this.replyErrorText(action, err));
+        // El backend conserva el texto editado y el motivo: se resincroniza el detalle.
+        this.refreshEmail(reply.processedEmailId);
+      },
+    });
+  }
+
+  private replyErrorText(action: ReplyAction, err: HttpErrorResponse): string {
+    if (err.status === 401) {
+      return 'Tu sesión de Google expiró. Vuelve a iniciar sesión para enviar la respuesta.';
+    }
+    if (err.status === 403) {
+      return 'No se pudo validar la solicitud (CSRF). Recarga la página e inténtalo de nuevo.';
+    }
+    const detail = typeof err.error?.detail === 'string' ? err.error.detail : null;
+    const prefix = action === 'send' ? 'No se pudo enviar la respuesta' : action === 'regenerate' ? 'No se pudo regenerar el borrador' : 'No se pudo descartar';
+    return detail ? `${prefix}: ${detail}` : `${prefix}.`;
+  }
+
+  /** Aplica el borrador actualizado a todas las vistas del correo (en vivo, destacado, drawer y tabla). */
+  private applyReply(reply: EmailReply): void {
+    const id = reply.processedEmailId;
+    this._processes.update((processes) => {
+      const entries = Object.entries(processes).map(([key, p]) => [key, p.processedEmailId === id ? withReply(p, reply) : p] as const);
+      return Object.fromEntries(entries);
+    });
+    this._featured.update((p) => (p && p.processedEmailId === id ? withReply(p, reply) : p));
+    this._selectedDetail.update((p) => (p && p.processedEmailId === id ? withReply(p, reply) : p));
+    this._emails.update((emails) => emails.map((e) => (e.id === id ? { ...e, replyId: reply.id, replyStatus: reply.status } : e)));
+  }
+
   openDetail(id: number): void {
+    this._replyError.set(null);
     this._selectedId.set(id);
     this._selectedDetail.set(null);
     this._detailLoading.set(true);
@@ -309,6 +376,13 @@ export class DashboardStore {
       if (event.stage === 'TOOL_COMPLETED' && event.toolName === JIRA_TOOL) {
         patch.jiraIssueKey = event.externalId;
       }
+      if (event.stage === 'REPLY_DRAFT_COMPLETED' || event.stage === 'REPLY_DRAFT_FAILED') {
+        const replyId = event.metadata?.['replyId'];
+        if (typeof replyId === 'number') {
+          patch.replyId = replyId;
+          patch.replyStatus = event.stage === 'REPLY_DRAFT_COMPLETED' ? 'DRAFT' : 'FAILED';
+        }
+      }
       if (event.stage === 'TOOL_COMPLETED' && event.toolName === CALENDAR_TOOL) {
         patch.meetingStart = event.metadata?.['start'] as string | undefined;
         patch.meetingEnd = event.metadata?.['end'] as string | undefined;
@@ -333,6 +407,10 @@ export class DashboardStore {
         );
         if (this._selectedId() === id) {
           this._selectedDetail.set(processFromDetail(detail));
+        }
+        // La versión en vivo también recibe el borrador guardado (id, texto final, errores de envío).
+        if (detail.reply) {
+          this.applyReply(detail.reply);
         }
       });
   }

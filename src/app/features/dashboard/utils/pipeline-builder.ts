@@ -3,6 +3,7 @@ import { companyFromSender } from '@shared/utils/email-address';
 
 import { AutomationEvent, FINAL_STAGES } from '../models/automation-event.model';
 import { CALENDAR_TOOL, CRM_TOOL, EmailAction, JIRA_TOOL } from '../models/email-action.model';
+import { EmailReply } from '../models/email-reply.model';
 import { ProspectField, ProspectStatus } from '../models/prospect.model';
 import {
   CrmResult,
@@ -119,6 +120,51 @@ function numberMeta(event: AutomationEvent, key: string): number | undefined {
 function stringMeta(event: AutomationEvent, key: string): string | undefined {
   const value = event.metadata?.[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+/** Estado visual de la etapa "Respuesta" según el borrador. */
+export function replyStep(reply: EmailReply): PipelineStep {
+  const timestamp = reply.sentAt ?? reply.updatedAt ?? reply.createdAt;
+  switch (reply.status) {
+    case 'DRAFT':
+      return { key: 'reply', status: 'SUCCESS', timestamp, detail: reply.edited ? 'Editada · por revisar' : 'Por revisar' };
+    case 'SENDING':
+      return { key: 'reply', status: 'PROCESSING', timestamp, detail: 'Enviando…' };
+    case 'SENT':
+      return { key: 'reply', status: 'SUCCESS', timestamp, detail: 'Enviada' };
+    case 'DISCARDED':
+      return { key: 'reply', status: 'SKIPPED', timestamp, detail: 'Descartada' };
+    default:
+      return { key: 'reply', status: 'FAILED', timestamp, error: reply.errorMessage ?? 'No se pudo redactar la respuesta.' };
+  }
+}
+
+/** Aplica al proceso el borrador devuelto por el backend (tras enviar, regenerar o descartar). */
+export function withReply(process: EmailProcess, reply: EmailReply): EmailProcess {
+  const timeline = [...process.timeline];
+  if (reply.status === 'SENT' && reply.sentAt && !timeline.some((item) => item.id === `reply-sent-${reply.id}`)) {
+    timeline.push({ id: `reply-sent-${reply.id}`, timestamp: reply.sentAt, text: `Respuesta enviada a ${reply.toAddress}`, tone: 'success' });
+  }
+  return { ...process, reply, steps: { ...process.steps, reply: replyStep(reply) }, timeline };
+}
+
+function replyFromEvent(event: AutomationEvent, status: EmailReply['status']): EmailReply | undefined {
+  const id = numberMeta(event, 'replyId');
+  if (id === undefined || event.processedEmailId == null) {
+    return undefined;
+  }
+  return {
+    id,
+    processedEmailId: event.processedEmailId,
+    toAddress: stringMeta(event, 'to') ?? '',
+    subject: stringMeta(event, 'subject'),
+    body: stringMeta(event, 'body'),
+    edited: false,
+    status,
+    errorMessage: event.error,
+    createdAt: event.timestamp,
+    updatedAt: event.timestamp,
+  };
 }
 
 /** Aplica un evento WebSocket al proceso (inmutable). */
@@ -242,6 +288,24 @@ export function applyEvent(current: EmailProcess, event: AutomationEvent): Email
       break;
     }
 
+    case 'REPLY_DRAFT_STARTED':
+      setStep('reply', { status: 'PROCESSING', detail: 'Redactando respuesta', error: undefined });
+      log('Gemini está redactando la respuesta sugerida', 'processing');
+      break;
+    case 'REPLY_DRAFT_COMPLETED':
+      next.reply = replyFromEvent(event, 'DRAFT') ?? next.reply;
+      setStep('reply', { status: 'SUCCESS', detail: 'Por revisar', error: undefined });
+      log('Respuesta sugerida lista para revisar', 'success');
+      break;
+    case 'REPLY_DRAFT_FAILED':
+      next.reply = replyFromEvent(event, 'FAILED') ?? next.reply;
+      setStep('reply', { status: 'FAILED', detail: undefined, error: event.error ?? event.message ?? 'No se pudo redactar la respuesta.' });
+      log('No se pudo redactar la respuesta sugerida', 'error');
+      break;
+    case 'REPLY_DRAFT_SKIPPED':
+      setStep('reply', { status: 'SKIPPED', detail: event.message ?? 'No requiere respuesta' });
+      break;
+
     case 'MARK_READ_STARTED':
       setStep('markRead', { status: 'PROCESSING', detail: 'Quitando UNREAD', error: undefined });
       break;
@@ -259,6 +323,9 @@ export function applyEvent(current: EmailProcess, event: AutomationEvent): Email
       next.finalStatus = event.stage === 'PROCESS_IGNORED' ? 'IGNORED' : 'PROCESSED';
       next.elapsedMs = event.elapsedMs;
       skipPendingTools(next, event.timestamp);
+      if (next.steps.reply.status === 'PENDING') {
+        setStep('reply', { status: 'SKIPPED', detail: next.finalStatus === 'IGNORED' ? 'No requiere respuesta' : 'No generada' });
+      }
       setStep('done', { status: 'SUCCESS', detail: next.finalStatus === 'IGNORED' ? 'Sin acciones' : 'Todo correcto' });
       log(next.finalStatus === 'IGNORED' ? 'Correo sin acciones: ignorado' : 'Procesamiento completado', 'success');
       break;
@@ -282,6 +349,10 @@ const AFTER_ANALYSIS: readonly AutomationEvent['stage'][] = [
   'TOOL_COMPLETED',
   'TOOL_FAILED',
   'TOOL_SKIPPED',
+  'REPLY_DRAFT_STARTED',
+  'REPLY_DRAFT_COMPLETED',
+  'REPLY_DRAFT_FAILED',
+  'REPLY_DRAFT_SKIPPED',
   'MARK_READ_STARTED',
   'MARK_READ_COMPLETED',
   'MARK_READ_FAILED',
@@ -321,7 +392,7 @@ function actionStepStatus(action?: EmailAction): StepStatus | null {
 
 /** Reconstruye el pipeline desde BD (sin timestamps por etapa más allá de los que guarda cada acción). */
 export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
-  const { email, actions } = detail;
+  const { email, actions, reply } = detail;
   const steps = emptySteps();
   const timeline: TimelineItem[] = [];
   const finished = email.status !== 'PROCESSING';
@@ -394,6 +465,18 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
     }
   }
 
+  if (reply) {
+    steps.reply = replyStep(reply);
+    if (reply.status !== 'FAILED' && reply.createdAt) {
+      timeline.push({ id: `reply-${reply.id}`, timestamp: reply.createdAt, text: 'Respuesta sugerida lista para revisar', tone: 'success' });
+    }
+    if (reply.status === 'SENT' && reply.sentAt) {
+      timeline.push({ id: `reply-sent-${reply.id}`, timestamp: reply.sentAt, text: `Respuesta enviada a ${reply.toAddress}`, tone: 'success' });
+    }
+  } else if (email.status === 'PROCESSED' || email.status === 'IGNORED') {
+    steps.reply = { key: 'reply', status: 'SKIPPED', detail: email.status === 'IGNORED' ? 'No requiere respuesta' : 'No generada' };
+  }
+
   if (email.gmailMarkedRead) {
     steps.markRead = { key: 'markRead', status: 'SUCCESS', timestamp: email.processedAt, detail: 'Marcado como leído' };
   } else if (email.status === 'PROCESSED' || email.status === 'IGNORED') {
@@ -444,6 +527,7 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
     crm,
     jira: jiraAction?.status === 'SUCCESS' && jiraAction.externalId ? { key: jiraAction.externalId, url: jiraAction.externalUrl } : undefined,
     meeting: calendarAction?.status === 'SUCCESS' ? meeting : undefined,
+    reply,
     live: false,
   };
 }

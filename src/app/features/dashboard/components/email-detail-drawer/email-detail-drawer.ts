@@ -4,16 +4,18 @@ import { Building2, Clock, LucideAngularModule, Timer, UserRound, X } from 'luci
 import { formatDay, formatDuration, formatTime } from '@shared/utils/date-format';
 import { companyFromSender, senderEmail, senderName } from '@shared/utils/email-address';
 
+import { EmailReply, ReplyAction } from '../../models/email-reply.model';
 import { EmailProcess } from '../../models/pipeline.model';
 import { ProcessedEmail } from '../../models/processed-email.model';
 import { ActivityTimelineComponent } from '../activity-timeline/activity-timeline';
 import { AutomationPipelineComponent } from '../automation-pipeline/automation-pipeline';
+import { ReplyComposerComponent } from '../reply-composer/reply-composer';
 import { StatusBadgeComponent } from '../status-badge/status-badge';
 
 /** Drawer lateral con el detalle completo de un correo procesado. Siempre en el DOM para animar entrada y salida. */
 @Component({
   selector: 'app-email-detail-drawer',
-  imports: [LucideAngularModule, AutomationPipelineComponent, ActivityTimelineComponent, StatusBadgeComponent],
+  imports: [LucideAngularModule, AutomationPipelineComponent, ActivityTimelineComponent, StatusBadgeComponent, ReplyComposerComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './email-detail-drawer.html',
   host: { '(document:keydown.escape)': 'open() && closed.emit()' },
@@ -24,7 +26,12 @@ export class EmailDetailDrawerComponent {
   /** Fila de la tabla: permite mostrar el encabezado mientras carga el detalle. */
   readonly email = input<ProcessedEmail | null>(null);
   readonly loading = input(false);
+  readonly replyBusy = input<ReplyAction | null>(null);
+  readonly replyError = input<string | null>(null);
   readonly closed = output<void>();
+  readonly sendReply = output<{ reply: EmailReply; body: string }>();
+  readonly regenerateReply = output<EmailReply>();
+  readonly discardReply = output<EmailReply>();
 
   protected readonly icons = { Building2, Clock, Timer, UserRound, X };
   protected readonly senderEmail = senderEmail;

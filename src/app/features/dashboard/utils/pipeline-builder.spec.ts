@@ -1,6 +1,6 @@
 import { AutomationEvent } from '../models/automation-event.model';
 import { ProcessedEmailDetail } from '../models/processed-email.model';
-import { applyEvent, createProcess, processFromDetail } from './pipeline-builder';
+import { applyEvent, createProcess, processFromDetail, withReply } from './pipeline-builder';
 
 const base = { gmailMessageId: 'g1', subject: 'Reunión NovaTech', from: 'Ana <ana@novatech.com>' };
 let clock = 0;
@@ -45,6 +45,14 @@ describe('pipeline-builder', () => {
         externalUrl: 'https://calendar/evt',
         metadata: { start: '2026-09-26T15:00:00-05:00', end: '2026-09-26T16:00:00-05:00' },
       }),
+      event({ stage: 'REPLY_DRAFT_STARTED', status: 'PROCESSING', processedEmailId: 7 }),
+      event({
+        stage: 'REPLY_DRAFT_COMPLETED',
+        status: 'SUCCESS',
+        processedEmailId: 7,
+        externalId: '3',
+        metadata: { replyId: 3, status: 'DRAFT', to: 'ana@novatech.com', subject: 'Re: Reunión NovaTech', body: 'Hola Ana, confirmamos.' },
+      }),
       event({ stage: 'MARK_READ_STARTED', status: 'PROCESSING' }),
       event({ stage: 'MARK_READ_COMPLETED', status: 'SUCCESS' }),
       event({ stage: 'PROCESS_COMPLETED', status: 'SUCCESS', elapsedMs: 6200 }),
@@ -53,7 +61,9 @@ describe('pipeline-builder', () => {
     expect(process.processedEmailId).toBe(7);
     expect(process.company).toBe('NovaTech');
     expect(process.aiSummary).toBe('NovaTech pide reunión.');
-    expect(Object.values(process.steps).map((s) => s.status)).toEqual(['SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS']);
+    expect(Object.values(process.steps).map((s) => s.status)).toEqual(['SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS']);
+    expect(process.reply).toMatchObject({ id: 3, processedEmailId: 7, status: 'DRAFT', toAddress: 'ana@novatech.com', body: 'Hola Ana, confirmamos.' });
+    expect(process.steps.reply.detail).toBe('Por revisar');
     expect(process.crm).toMatchObject({ prospectId: 5, name: 'Ana Torres', status: 'MEETING_SCHEDULED', created: true, missingFields: ['phone'] });
     expect(process.steps.crm.detail).toBe('Ana Torres · nuevo');
     expect(process.steps.gemini.detail).toBe('3 acciones detectadas');
@@ -69,6 +79,8 @@ describe('pipeline-builder', () => {
       'Contacto CRM creado: Ana Torres',
       'Ticket SCRUM-14 creado',
       'Reunión creada',
+      'Gemini está redactando la respuesta sugerida',
+      'Respuesta sugerida lista para revisar',
       'Correo marcado como leído',
       'Procesamiento completado',
     ]);
@@ -177,6 +189,17 @@ describe('pipeline-builder', () => {
           updatedAt: '2026-09-25T18:00:02Z',
         },
       ],
+      reply: {
+        id: 4,
+        processedEmailId: 3,
+        toAddress: 'ana@novatech.com',
+        subject: 'Re: Reunión NovaTech',
+        body: 'Hola Ana',
+        edited: true,
+        status: 'SENT',
+        sentAt: '2026-09-25T18:05:00Z',
+        createdAt: '2026-09-25T18:00:08Z',
+      },
     };
 
     const process = processFromDetail(detail);
@@ -187,5 +210,34 @@ describe('pipeline-builder', () => {
     expect(process.meeting?.url).toBe('https://cal/evt');
     expect(process.crm).toMatchObject({ prospectId: 9, name: 'Ana Torres', missingFields: ['phone'], inferredFields: ['company'] });
     expect(process.live).toBe(false);
+  });
+
+  it('respuesta: fallo de redacción, remitente automático y actualización tras enviar', () => {
+    const failed = run([
+      event({ stage: 'EMAIL_CLAIMED', status: 'SUCCESS', processedEmailId: 8 }),
+      event({ stage: 'REPLY_DRAFT_STARTED', status: 'PROCESSING', processedEmailId: 8 }),
+      event({ stage: 'REPLY_DRAFT_FAILED', status: 'FAILED', processedEmailId: 8, error: 'Gemini saturado', metadata: { replyId: 11 } }),
+    ]);
+    expect(failed.steps.reply).toMatchObject({ status: 'FAILED', error: 'Gemini saturado' });
+    expect(failed.reply).toMatchObject({ id: 11, status: 'FAILED', errorMessage: 'Gemini saturado' });
+
+    const skipped = run([
+      event({ stage: 'EMAIL_CLAIMED', status: 'SUCCESS', processedEmailId: 9 }),
+      event({ stage: 'REPLY_DRAFT_SKIPPED', status: 'SKIPPED', processedEmailId: 9, message: 'Remitente automático: no requiere respuesta.' }),
+      event({ stage: 'PROCESS_COMPLETED', status: 'SUCCESS', processedEmailId: 9 }),
+    ]);
+    expect(skipped.steps.reply).toMatchObject({ status: 'SKIPPED', detail: 'Remitente automático: no requiere respuesta.' });
+
+    const sent = withReply(failed, {
+      id: 11,
+      processedEmailId: 8,
+      toAddress: 'ana@novatech.com',
+      body: 'Hola',
+      edited: false,
+      status: 'SENT',
+      sentAt: '2026-09-25T18:10:00Z',
+    });
+    expect(sent.steps.reply).toMatchObject({ status: 'SUCCESS', detail: 'Enviada' });
+    expect(sent.timeline.at(-1)?.text).toBe('Respuesta enviada a ana@novatech.com');
   });
 });
