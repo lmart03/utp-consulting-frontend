@@ -1,0 +1,247 @@
+<ng-template #skeleton>
+  <div class="animate-pulse space-y-5">
+    <div class="h-4 w-40 rounded bg-slate-200"></div>
+    <div class="h-6 w-2/3 rounded bg-slate-200"></div>
+    <div class="grid gap-3 sm:grid-cols-3">
+      <div class="h-10 rounded-lg bg-slate-200"></div>
+      <div class="h-10 rounded-lg bg-slate-200"></div>
+      <div class="h-10 rounded-lg bg-slate-200"></div>
+    </div>
+    <div class="h-16 rounded-xl bg-slate-200"></div>
+    <div class="flex justify-between gap-4">
+      @for (n of [1, 2, 3, 4, 5, 6]; track n) {
+        <div class="size-10 rounded-full bg-slate-200"></div>
+      }
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #content>
+  @if (process(); as p) {
+    <!-- Datos del correo (solo en la tarjeta; el drawer tiene su propio encabezado) -->
+    @if (!isDrawer()) {
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Asunto</p>
+          <h3 class="mt-1 line-clamp-2 break-words text-lg font-semibold text-slate-900 sm:line-clamp-1 sm:text-xl" [title]="p.subject ?? ''">
+            {{ p.subject || '(sin asunto)' }}
+          </h3>
+        </div>
+        @if (inProgress()) {
+          @if (p.steps.gemini.status === 'PENDING') {
+            <span class="inline-flex animate-fade-in items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+              <span class="size-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+              Nuevo correo detectado
+            </span>
+          } @else {
+            <span class="inline-flex animate-fade-in items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+              <span class="size-1.5 animate-pulse rounded-full bg-emerald-500"></span>
+              Procesando en vivo
+            </span>
+          }
+        } @else if (p.finalStatus) {
+          <app-status-badge [status]="p.finalStatus" />
+        }
+      </div>
+
+      <dl class="mt-4 grid gap-3 sm:grid-cols-3">
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <lucide-icon [img]="icons.UserRound" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Remitente</dt>
+            <dd class="truncate text-sm text-slate-700" [title]="p.from ?? ''">{{ senderEmail(p.from) || '—' }}</dd>
+          </div>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <lucide-icon [img]="icons.Building2" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Empresa detectada</dt>
+            <dd class="truncate text-sm text-slate-700">{{ p.company || '—' }}</dd>
+          </div>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <lucide-icon [img]="icons.Clock" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Inicio del proceso</dt>
+            <dd class="truncate text-sm tabular-nums text-slate-700">{{ formatTime(p.startedAt, true) }}</dd>
+          </div>
+        </div>
+      </dl>
+    }
+
+    <!-- Resumen IA -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4" [class.mt-4]="!isDrawer()">
+      <div class="flex items-center gap-2">
+        <span class="flex size-6 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
+          <lucide-icon [img]="icons.Sparkles" class="size-3.5" />
+        </span>
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Resumen IA</p>
+      </div>
+      @if (p.aiSummary) {
+        <p class="mt-2 animate-fade-in text-sm leading-6 text-slate-700">{{ p.aiSummary }}</p>
+      } @else if (geminiAnalyzing() || p.steps.gemini.status === 'PENDING') {
+        <div class="mt-3 animate-pulse space-y-2" aria-label="Gemini está analizando">
+          <div class="h-3 w-11/12 rounded bg-slate-200"></div>
+          <div class="h-3 w-3/4 rounded bg-slate-200"></div>
+        </div>
+      } @else {
+        <p class="mt-2 text-sm text-slate-400">Sin resumen disponible.</p>
+      }
+    </div>
+
+    <!-- Pipeline -->
+    <ol [class]="stepsListClass()" class="mt-6" aria-label="Etapas del procesamiento">
+      @for (item of steps(); track item.step.key) {
+        <li app-pipeline-step [step]="item.step" [connector]="item.connector" [vertical]="isDrawer()"></li>
+      }
+    </ol>
+
+    <!-- Resultados: Jira y Calendar -->
+    @if (p.jira || p.meeting) {
+      <div [class]="isDrawer() ? 'mt-6 grid gap-3' : 'mt-6 grid gap-3 sm:grid-cols-2'">
+        @if (p.jira; as jira) {
+          <div class="flex animate-fade-in-up items-center gap-3 rounded-xl border border-slate-200 p-4 transition-shadow duration-200 hover:shadow-sm">
+            <span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <lucide-icon [img]="icons.Ticket" class="size-5" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs text-slate-400">Ticket Jira</p>
+              <p class="font-mono text-sm font-semibold text-slate-900">{{ jira.key }}</p>
+            </div>
+            @if (jira.url) {
+              <a
+                [href]="jira.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+              >
+                Abrir en Jira
+                <lucide-icon [img]="icons.ExternalLink" class="size-3.5" />
+              </a>
+            }
+          </div>
+        }
+        @if (p.meeting; as meeting) {
+          <div class="flex animate-fade-in-up items-center gap-3 rounded-xl border border-slate-200 p-4 transition-shadow duration-200 hover:shadow-sm">
+            <span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <lucide-icon [img]="icons.CalendarDays" class="size-5" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs text-slate-400">Reunión</p>
+              <p class="text-sm font-semibold text-slate-900">{{ formatDay(meeting.start) || 'Evento creado' }}</p>
+              @if (meeting.start) {
+                <p class="text-xs tabular-nums text-slate-500">{{ formatTimeRange(meeting.start, meeting.end) }}</p>
+              }
+            </div>
+            @if (meeting.url) {
+              <a
+                [href]="meeting.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors duration-200 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+              >
+                Abrir Calendar
+                <lucide-icon [img]="icons.ExternalLink" class="size-3.5" />
+              </a>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Errores por etapa (sin stack traces) -->
+    @if (failedSteps().length > 0 || doneStep()?.status === 'FAILED') {
+      <div class="mt-6 space-y-2">
+        @for (failed of failedSteps(); track failed.key) {
+          <div class="flex animate-fade-in-up gap-3 rounded-xl border border-red-100 bg-red-50/60 p-4">
+            <lucide-icon [img]="icons.CircleAlert" class="mt-0.5 size-4 shrink-0 text-red-500" />
+            <div class="min-w-0 text-sm">
+              <p class="font-medium text-red-700">{{ failed.label }} · Error</p>
+              <p class="mt-0.5 break-words text-red-600/90">{{ failed.error }}</p>
+              <p class="mt-1 flex flex-wrap gap-x-4 text-xs text-red-500">
+                @if (failed.attempt) {
+                  <span>Intento {{ failed.attempt }}@if (failed.maxAttempts) { de {{ failed.maxAttempts }} }</span>
+                }
+                @if (failed.nextRetryAt) {
+                  <span>Próximo reintento: {{ formatTime(failed.nextRetryAt) }}</span>
+                }
+              </p>
+            </div>
+          </div>
+        }
+        @if (failedSteps().length === 0 && doneStep(); as done) {
+          <div class="flex gap-3 rounded-xl border border-amber-100 bg-amber-50/70 p-4 text-sm">
+            <lucide-icon [img]="icons.CircleAlert" class="mt-0.5 size-4 shrink-0 text-amber-500" />
+            <div class="min-w-0">
+              <p class="font-medium text-amber-800">{{ done.detail || 'El procesamiento no terminó correctamente' }}</p>
+              @if (done.error) {
+                <p class="mt-0.5 break-words text-amber-700/90">{{ done.error }}</p>
+              }
+              @if (done.nextRetryAt) {
+                <p class="mt-1 text-xs text-amber-600">Próximo reintento: {{ formatTime(done.nextRetryAt) }}</p>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Duración total -->
+    @if (p.finalStatus && duration()) {
+      <div class="mt-6 flex animate-fade-in-up justify-center">
+        @if (p.finalStatus === 'PROCESSED' || p.finalStatus === 'IGNORED') {
+          <span class="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
+            <lucide-icon [img]="icons.CircleCheck" class="size-4 animate-scale-in" />
+            Completado en {{ duration() }}
+          </span>
+        } @else {
+          <span class="inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700">
+            <lucide-icon [img]="icons.CircleAlert" class="size-4" />
+            Terminó con errores en {{ duration() }}
+          </span>
+        }
+      </div>
+    }
+  } @else {
+    <!-- Empty state -->
+    <div class="flex flex-col items-center py-10 text-center">
+      <span class="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <lucide-icon [img]="icons.Inbox" class="size-6" />
+      </span>
+      <p class="mt-4 text-sm font-semibold text-slate-900">No hay procesos recientes</p>
+      <p class="mt-1 max-w-sm text-sm text-slate-500">Cuando llegue un nuevo correo, aparecerá aquí automáticamente.</p>
+    </div>
+  }
+</ng-template>
+
+@if (isDrawer()) {
+  @if (loading() && !process()) {
+    <ng-container [ngTemplateOutlet]="skeleton" />
+  } @else {
+    <ng-container [ngTemplateOutlet]="content" />
+  }
+} @else {
+  <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <header class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
+      <div class="flex items-center gap-2">
+        <span class="relative flex size-2">
+          @if (inProgress()) {
+            <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+          }
+          <span class="relative inline-flex size-2 rounded-full" [class]="inProgress() ? 'bg-emerald-500' : 'bg-slate-300'"></span>
+        </span>
+        <h2 class="text-sm font-semibold text-slate-900">{{ inProgress() ? 'Procesando ahora' : 'Último procesamiento' }}</h2>
+      </div>
+      @if (process()?.live) {
+        <span class="text-xs text-slate-400">Tiempo real</span>
+      }
+    </header>
+    <div class="px-5 py-5 sm:px-6 sm:py-6">
+      @if (loading()) {
+        <ng-container [ngTemplateOutlet]="skeleton" />
+      } @else {
+        <ng-container [ngTemplateOutlet]="content" />
+      }
+    </div>
+  </section>
+}

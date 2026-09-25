@@ -1,0 +1,86 @@
+<div class="fixed inset-0 z-40" [class.pointer-events-none]="!open()" [attr.inert]="open() ? null : ''" [attr.aria-hidden]="!open()">
+  <!-- Overlay muy ligero -->
+  <div
+    class="absolute inset-0 bg-slate-900/20 transition-opacity duration-300 ease-out"
+    [class]="open() ? 'opacity-100' : 'opacity-0'"
+    (click)="closed.emit()"
+  ></div>
+
+  <aside
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="email-detail-title"
+    class="absolute inset-y-0 right-0 flex w-full flex-col bg-white shadow-xl transition-transform duration-300 ease-out sm:max-w-lg xl:max-w-xl"
+    [class]="open() ? 'translate-x-0' : 'translate-x-full'"
+  >
+    <header class="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6">
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Detalle del correo</p>
+          @if (status(); as current) {
+            <app-status-badge [status]="current" />
+          }
+        </div>
+        <h2 id="email-detail-title" class="mt-1.5 text-lg font-semibold leading-snug text-slate-900">
+          {{ subject() || '(sin asunto)' }}
+        </h2>
+      </div>
+      <button
+        type="button"
+        (click)="closed.emit()"
+        class="rounded-lg p-2 text-slate-400 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-600"
+        aria-label="Cerrar detalle"
+      >
+        <lucide-icon [img]="icons.X" class="size-5" />
+      </button>
+    </header>
+
+    <div class="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+      <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 sm:col-span-2">
+          <lucide-icon [img]="icons.UserRound" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Remitente</dt>
+            <dd class="truncate text-sm text-slate-700" [title]="from()">
+              {{ senderName(from()) }}
+              @if (senderName(from()) !== senderEmail(from())) {
+                <span class="text-slate-400">· {{ senderEmail(from()) }}</span>
+              }
+            </dd>
+          </div>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <lucide-icon [img]="icons.Building2" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Empresa</dt>
+            <dd class="truncate text-sm text-slate-700">{{ company() }}</dd>
+          </div>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+          <lucide-icon [img]="icons.Clock" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Recibido</dt>
+            <dd class="truncate text-sm tabular-nums text-slate-700">{{ received() }}</dd>
+          </div>
+        </div>
+        <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 sm:col-span-2">
+          <lucide-icon [img]="icons.Timer" class="size-4 shrink-0 text-slate-400" />
+          <div class="min-w-0">
+            <dt class="text-xs text-slate-400">Duración total</dt>
+            <dd class="text-sm tabular-nums text-slate-700">{{ duration() }}</dd>
+          </div>
+        </div>
+      </dl>
+
+      <div class="mt-6">
+        <app-automation-pipeline variant="drawer" [process]="process()" [loading]="loading()" />
+      </div>
+
+      @if (process(); as p) {
+        <div class="mt-8 border-t border-slate-100 pt-6">
+          <app-activity-timeline [items]="p.timeline" [bare]="true" [limit]="30" />
+        </div>
+      }
+    </div>
+  </aside>
+</div>

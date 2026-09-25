@@ -1,0 +1,62 @@
+<header class="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+  <div class="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+    <div class="flex min-w-0 items-center gap-3">
+      <span class="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm">
+        <lucide-icon [img]="logoIcon" class="size-5" />
+      </span>
+      <div class="min-w-0 leading-tight">
+        <p class="truncate text-sm font-semibold text-slate-900">UTP Assistant</p>
+        <p class="hidden truncate text-xs text-slate-500 sm:block">Automation Dashboard · Automatización inteligente de correos</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 sm:gap-3">
+      <!-- Sistema activo -->
+      <span
+        class="hidden items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-300 md:inline-flex"
+        [class]="systemActive() ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'"
+      >
+        <span class="relative flex size-2">
+          @if (systemActive()) {
+            <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-50 [animation-duration:2s]"></span>
+          }
+          <span class="relative inline-flex size-2 rounded-full" [class]="systemActive() ? 'bg-emerald-500' : 'bg-slate-400'"></span>
+        </span>
+        {{ systemActive() ? 'Sistema activo' : 'Sistema en pausa' }}
+      </span>
+
+      <!-- Estado del WebSocket -->
+      <span
+        class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors duration-300"
+        [class]="connection() === 'live' ? 'bg-slate-50 text-slate-600' : 'bg-amber-50 text-amber-700'"
+        [title]="connection() === 'live' ? 'Recibiendo eventos en tiempo real' : 'Intentando conectar con el servidor'"
+      >
+        <span
+          class="size-1.5 rounded-full"
+          [class]="connection() === 'live' ? 'bg-emerald-500' : 'animate-pulse bg-amber-500'"
+        ></span>
+        {{ connectionLabel() }}
+      </span>
+
+      <div class="ml-1 flex items-center gap-2 border-l border-slate-200 pl-3">
+        <span
+          class="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-emerald-700"
+          [title]="userEmail() ?? ''"
+        >{{ initials() }}</span>
+        <div class="hidden min-w-0 leading-tight lg:block">
+          <p class="max-w-[180px] truncate text-sm font-medium text-slate-900">{{ userName() || 'Cuenta Google' }}</p>
+          <p class="max-w-[180px] truncate text-xs text-slate-500">{{ userEmail() }}</p>
+        </div>
+        <button
+          type="button"
+          (click)="logout.emit()"
+          class="rounded-lg p-2 text-slate-400 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-600"
+          aria-label="Cerrar sesión"
+          title="Cerrar sesión"
+        >
+          <lucide-icon [img]="logoutIcon" class="size-4" />
+        </button>
+      </div>
+    </div>
+  </div>
+</header>

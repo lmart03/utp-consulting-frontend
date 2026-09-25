@@ -1,0 +1,114 @@
+<section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <header class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-900">Procesamientos recientes</h2>
+      <p class="mt-0.5 text-xs text-slate-400">Haz clic en un correo para ver su detalle.</p>
+    </div>
+    @if (!loading() && emails().length > 0) {
+      <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">{{ emails().length }}</span>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="animate-pulse space-y-3 border-t border-slate-100 px-5 py-5 sm:px-6">
+      @for (row of [1, 2, 3, 4]; track row) {
+        <div class="flex items-center gap-4">
+          <div class="h-3 flex-1 rounded bg-slate-200"></div>
+          <div class="hidden h-3 w-32 rounded bg-slate-200 sm:block"></div>
+          <div class="h-5 w-20 rounded-full bg-slate-200"></div>
+        </div>
+      }
+    </div>
+  } @else if (emails().length === 0) {
+    <div class="flex flex-col items-center border-t border-slate-100 px-6 py-12 text-center">
+      <span class="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <lucide-icon [img]="inboxIcon" class="size-6" />
+      </span>
+      <p class="mt-4 text-sm font-semibold text-slate-900">No hay procesos recientes</p>
+      <p class="mt-1 max-w-sm text-sm text-slate-500">Cuando llegue un nuevo correo, aparecerá aquí automáticamente.</p>
+    </div>
+  } @else {
+    <!-- Desktop / tablet: tabla -->
+    <div class="hidden overflow-x-auto md:block">
+      <table class="w-full min-w-[860px] text-left text-sm">
+        <thead class="border-y border-slate-100 bg-slate-50/80 text-xs font-medium text-slate-500">
+          <tr>
+            <th class="px-6 py-3 font-medium">Asunto</th>
+            <th class="px-3 py-3 font-medium">Remitente</th>
+            <th class="px-3 py-3 font-medium">Empresa</th>
+            <th class="px-3 py-3 font-medium">Estado</th>
+            <th class="px-3 py-3 font-medium">Jira</th>
+            <th class="px-3 py-3 font-medium">Reunión</th>
+            <th class="px-3 py-3 text-right font-medium">Duración</th>
+            <th class="px-6 py-3 text-right font-medium">Hora</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          @for (email of emails(); track email.id) {
+            <tr
+              tabindex="0"
+              (click)="selectEmail.emit(email.id)"
+              (keydown.enter)="selectEmail.emit(email.id)"
+              class="animate-fade-in-up cursor-pointer transition-colors duration-200 ease-out hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+              [class]="email.id === selectedId() ? 'bg-emerald-50/50' : ''"
+            >
+              <td class="max-w-[260px] px-6 py-3.5">
+                <p class="truncate font-medium text-slate-900" [title]="email.subject ?? ''">{{ email.subject || '(sin asunto)' }}</p>
+              </td>
+              <td class="max-w-[200px] px-3 py-3.5">
+                <p class="truncate text-slate-500" [title]="email.fromAddress ?? ''">{{ senderEmail(email.fromAddress) }}</p>
+              </td>
+              <td class="px-3 py-3.5 text-slate-600">{{ company(email) }}</td>
+              <td class="px-3 py-3.5"><app-status-badge [status]="email.status" /></td>
+              <td class="px-3 py-3.5">
+                @if (email.jiraIssueKey) {
+                  <span class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">{{ email.jiraIssueKey }}</span>
+                } @else {
+                  <span class="text-slate-300">—</span>
+                }
+              </td>
+              <td class="whitespace-nowrap px-3 py-3.5 text-slate-600">
+                {{ email.meetingStart ? formatShortDateTime(email.meetingStart) : '—' }}
+              </td>
+              <td class="whitespace-nowrap px-3 py-3.5 text-right tabular-nums text-slate-500">
+                {{ formatDuration(email.elapsedMs) || '—' }}
+              </td>
+              <td class="whitespace-nowrap px-6 py-3.5 text-right tabular-nums text-slate-500">{{ formatTime(email.createdAt) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile: tarjetas -->
+    <ul class="divide-y divide-slate-100 border-t border-slate-100 md:hidden">
+      @for (email of emails(); track email.id) {
+        <li>
+          <button
+            type="button"
+            (click)="selectEmail.emit(email.id)"
+            class="flex w-full animate-fade-in-up items-center gap-3 px-5 py-4 text-left transition-colors duration-200 hover:bg-slate-50"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <p class="truncate text-sm font-medium text-slate-900">{{ email.subject || '(sin asunto)' }}</p>
+                <span class="shrink-0 text-xs tabular-nums text-slate-400">{{ formatTime(email.createdAt) }}</span>
+              </div>
+              <p class="mt-0.5 truncate text-xs text-slate-500">{{ senderEmail(email.fromAddress) }} · {{ company(email) }}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <app-status-badge [status]="email.status" />
+                @if (email.jiraIssueKey) {
+                  <span class="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-700">{{ email.jiraIssueKey }}</span>
+                }
+                @if (email.meetingStart) {
+                  <span class="text-xs text-slate-500">{{ formatShortDateTime(email.meetingStart) }}</span>
+                }
+              </div>
+            </div>
+            <lucide-icon [img]="chevronIcon" class="size-4 shrink-0 text-slate-300" />
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</section>

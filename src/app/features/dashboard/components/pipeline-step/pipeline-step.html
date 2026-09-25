@@ -1,0 +1,50 @@
+@if (connector() !== 'none') {
+  <div [class]="connectorClass()" aria-hidden="true">
+    <div [class]="fillClass()"></div>
+    @if (connector() === 'active') {
+      <div [class]="flowClass()"></div>
+    }
+  </div>
+}
+
+<div [class]="nodeClass()">
+  <!-- @for con track por estado: el ícono se vuelve a crear al cambiar y entra con scale suave -->
+  @for (status of [step().status]; track status) {
+    @switch (status) {
+      @case ('SUCCESS') {
+        <lucide-icon [img]="checkIcon" class="size-5 animate-scale-in" [strokeWidth]="2.5" />
+      }
+      @case ('FAILED') {
+        <lucide-icon [img]="failIcon" class="size-5 animate-scale-in" [strokeWidth]="2.5" />
+      }
+      @case ('SKIPPED') {
+        <lucide-icon [img]="skipIcon" class="size-4 animate-scale-in" />
+      }
+      @case ('PROCESSING') {
+        <lucide-icon [img]="icon()" class="size-4 animate-fade-in" />
+        <span class="absolute -inset-1 animate-spin rounded-full border-2 border-emerald-500/70 border-t-transparent"></span>
+      }
+      @default {
+        <lucide-icon [img]="icon()" class="size-4" />
+      }
+    }
+  }
+</div>
+
+<div [class]="bodyClass()">
+  <p class="text-sm font-medium text-slate-900">{{ label() }}</p>
+  @for (status of [step().status]; track status) {
+    <p class="animate-fade-in text-xs font-medium" [class]="statusTextClass()">{{ statusText() }}</p>
+  }
+  @if (step().timestamp) {
+    <p class="mt-0.5 text-xs tabular-nums text-slate-400">{{ formatTime(step().timestamp, true) }}</p>
+  }
+  @if (step().detail) {
+    <p class="mt-1 animate-fade-in truncate text-xs text-slate-500" [title]="step().detail">{{ step().detail }}</p>
+  }
+  @if (step().status === 'FAILED' && step().attempt) {
+    <p class="mt-1 text-xs text-red-500">
+      Intento {{ step().attempt }}@if (step().maxAttempts) { de {{ step().maxAttempts }} }
+    </p>
+  }
+</div>
