@@ -31,6 +31,8 @@ export interface IntegrationsStatus {
   gemini: IntegrationInfo;
   jira: IntegrationInfo;
   calendar: IntegrationInfo;
+  /** Ausente en backends anteriores al CRM. */
+  crm?: IntegrationInfo;
 }
 
 export interface IntegrationInfo {

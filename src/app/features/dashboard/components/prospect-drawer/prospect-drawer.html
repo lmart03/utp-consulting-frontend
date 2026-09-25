@@ -1,0 +1,128 @@
+<div class="fixed inset-0 z-40" [class.pointer-events-none]="!open()" [attr.inert]="open() ? null : ''" [attr.aria-hidden]="!open()">
+  <div
+    class="absolute inset-0 bg-slate-900/20 transition-opacity dark:bg-black/50 duration-300 ease-out"
+    [class]="open() ? 'opacity-100' : 'opacity-0'"
+    (click)="closed.emit()"
+  ></div>
+
+  <aside
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="prospect-title"
+    class="absolute inset-y-0 right-0 flex w-full flex-col bg-surface shadow-xl transition-transform duration-300 ease-out sm:max-w-lg"
+    [class]="open() ? 'translate-x-0' : 'translate-x-full'"
+  >
+    <header class="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6">
+      <div class="flex min-w-0 items-center gap-3">
+        <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <lucide-icon [img]="icons.Contact" class="size-5" />
+        </span>
+        <div class="min-w-0">
+          <p class="text-xs font-medium uppercase tracking-wide text-slate-400">Contacto CRM</p>
+          <h2 id="prospect-title" class="truncate text-lg font-semibold text-slate-900">
+            {{ detail()?.prospect?.name || detail()?.prospect?.email || 'Cargando…' }}
+          </h2>
+        </div>
+      </div>
+      <button
+        type="button"
+        (click)="closed.emit()"
+        class="rounded-lg p-2 text-slate-400 transition-colors duration-200 hover:bg-slate-100 hover:text-slate-600"
+        aria-label="Cerrar ficha"
+      >
+        <lucide-icon [img]="icons.X" class="size-5" />
+      </button>
+    </header>
+
+    <div class="flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+      @if (detail(); as d) {
+        <div class="flex flex-wrap items-center gap-2">
+          <app-prospect-status-badge [status]="d.prospect.status" />
+          <span class="text-xs text-slate-400">{{ d.prospect.interactionCount }} correo(s) · desde {{ formatDay(d.prospect.createdAt) }}</span>
+        </div>
+
+        @if (d.prospect.missingFields.length > 0) {
+          <div class="mt-4 flex gap-3 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-sm">
+            <lucide-icon [img]="icons.CircleAlert" class="mt-0.5 size-4 shrink-0 text-amber-500" />
+            <p class="text-amber-800">
+              Datos incompletos: el correo no incluía <strong class="font-medium">{{ missingText() }}</strong>.
+              Se completarán si el contacto los envía en un próximo correo.
+            </p>
+          </div>
+        }
+
+        <dl class="mt-4 grid gap-3">
+          <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+            <lucide-icon [img]="icons.Mail" class="size-4 shrink-0 text-slate-400" />
+            <div class="min-w-0">
+              <dt class="text-xs text-slate-400">Email (remitente real)</dt>
+              <dd class="truncate text-sm text-slate-700">{{ d.prospect.email }}</dd>
+            </div>
+          </div>
+          <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+            <lucide-icon [img]="icons.Building2" class="size-4 shrink-0 text-slate-400" />
+            <div class="min-w-0">
+              <dt class="text-xs text-slate-400">
+                Empresa
+                @if (d.prospect.companySource) {
+                  <span>· {{ sourceLabel(d.prospect.companySource) }}</span>
+                }
+              </dt>
+              <dd class="truncate text-sm text-slate-700">{{ d.prospect.company || '—' }}</dd>
+            </div>
+          </div>
+          <div class="flex min-w-0 items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5">
+            <lucide-icon [img]="icons.Phone" class="size-4 shrink-0 text-slate-400" />
+            <div class="min-w-0">
+              <dt class="text-xs text-slate-400">Teléfono</dt>
+              <dd class="truncate text-sm text-slate-700">{{ d.prospect.phone || '—' }}</dd>
+            </div>
+          </div>
+        </dl>
+        @if (d.prospect.nameSource && d.prospect.nameSource !== 'GEMINI') {
+          <p class="mt-2 text-xs text-slate-400">Nombre {{ sourceLabel(d.prospect.nameSource) }}.</p>
+        }
+
+        @if (d.prospect.notes) {
+          <div class="mt-5 rounded-xl border border-slate-200 p-4">
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Últimas notas</p>
+            <p class="mt-2 text-sm leading-6 text-slate-700">{{ d.prospect.notes }}</p>
+          </div>
+        }
+
+        <div class="mt-6 border-t border-slate-100 pt-5">
+          <h3 class="text-sm font-semibold text-slate-900">Historial</h3>
+          <ol class="relative mt-4 space-y-4 before:absolute before:inset-y-1 before:left-[5px] before:w-px before:bg-slate-200">
+            @for (item of d.interactions; track item.id) {
+              <li class="relative flex animate-fade-in-up gap-4">
+                <span class="relative z-10 mt-1.5 size-[11px] shrink-0 rounded-full border-2 border-emerald-500 bg-surface"></span>
+                <div class="min-w-0">
+                  <p class="text-xs tabular-nums text-slate-400">
+                    {{ formatShortDateTime(item.createdAt) }} · {{ item.source === 'MANUAL' ? 'Manual' : 'Correo' }}
+                  </p>
+                  <p class="truncate text-sm font-medium text-slate-800">{{ item.subject || '(sin asunto)' }}</p>
+                  @if (item.statusBefore && item.statusBefore !== item.statusAfter) {
+                    <p class="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                      <app-prospect-status-badge [status]="item.statusBefore" /> →
+                      <app-prospect-status-badge [status]="item.statusAfter" />
+                    </p>
+                  }
+                  @if (item.notes) {
+                    <p class="mt-1 text-sm text-slate-600">{{ item.notes }}</p>
+                  }
+                </div>
+              </li>
+            }
+          </ol>
+        </div>
+      } @else if (loading()) {
+        <div class="animate-pulse space-y-4">
+          <div class="h-5 w-32 rounded-full bg-slate-200"></div>
+          <div class="h-12 rounded-xl bg-slate-200"></div>
+          <div class="h-12 rounded-xl bg-slate-200"></div>
+          <div class="h-12 rounded-xl bg-slate-200"></div>
+        </div>
+      }
+    </div>
+  </aside>
+</div>

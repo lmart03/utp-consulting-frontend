@@ -3,7 +3,9 @@
   [userEmail]="user()?.email ?? store.connectedAccount()"
   [systemActive]="store.systemActive()"
   [connection]="store.connection()"
+  [darkMode]="theme.isDark()"
   (logout)="logout()"
+  (themeToggled)="theme.toggle()"
 />
 
 <main class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 sm:gap-8 sm:px-6 sm:py-10 lg:px-8">
@@ -41,7 +43,7 @@
   @if (store.loading()) {
     <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       @for (n of [1, 2, 3, 4]; track n) {
-        <div class="h-[118px] animate-pulse rounded-2xl border border-slate-200 bg-white p-5">
+        <div class="h-[118px] animate-pulse rounded-2xl border border-slate-200 bg-surface p-5">
           <div class="h-3 w-24 rounded bg-slate-200"></div>
           <div class="mt-4 h-7 w-12 rounded bg-slate-200"></div>
           <div class="mt-3 h-2.5 w-20 rounded bg-slate-200"></div>
@@ -70,6 +72,15 @@
     [selectedId]="store.selectedEmail()?.id ?? null"
     (selectEmail)="store.openDetail($event)"
   />
+
+  <!-- CRM -->
+  <app-prospects-table
+    [prospects]="store.prospects()"
+    [loading]="store.prospectsLoading()"
+    [search]="store.prospectSearch()"
+    (searchChange)="store.searchProspects($event)"
+    (selectProspect)="store.openProspect($event)"
+  />
 </main>
 
 <app-email-detail-drawer
@@ -78,4 +89,11 @@
   [email]="store.selectedEmail()"
   [loading]="store.detailLoading()"
   (closed)="store.closeDetail()"
+/>
+
+<app-prospect-drawer
+  [open]="store.prospectDrawerOpen()"
+  [detail]="store.selectedProspect()"
+  [loading]="store.prospectLoading()"
+  (closed)="store.closeProspect()"
 />

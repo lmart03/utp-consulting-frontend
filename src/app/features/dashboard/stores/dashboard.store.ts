@@ -1,17 +1,19 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, forkJoin, of } from 'rxjs';
+import { Subject, catchError, debounceTime, distinctUntilChanged, forkJoin, of, switchMap } from 'rxjs';
 
 import { isToday } from '@shared/utils/date-format';
 
 import { AutomationEvent, FINAL_STAGES } from '../models/automation-event.model';
 import { AutomationStatus, IntegrationsStatus, LiveConnectionState } from '../models/automation-status.model';
 import { DashboardKpi } from '../models/dashboard-kpi.model';
-import { CALENDAR_TOOL, JIRA_TOOL } from '../models/email-action.model';
+import { CALENDAR_TOOL, CRM_TOOL, JIRA_TOOL } from '../models/email-action.model';
 import { EmailProcess } from '../models/pipeline.model';
 import { ProcessedEmail } from '../models/processed-email.model';
+import { Prospect, ProspectDetail } from '../models/prospect.model';
 import { AutomationApiService } from '../services/automation-api.service';
 import { AutomationWebsocketService } from '../services/automation-websocket.service';
+import { CrmApiService } from '../services/crm-api.service';
 import { applyEvent, createProcess, processFromDetail, processKey } from '../utils/pipeline-builder';
 
 /**
@@ -22,6 +24,7 @@ import { applyEvent, createProcess, processFromDetail, processKey } from '../uti
 export class DashboardStore {
   private readonly api = inject(AutomationApiService);
   private readonly socket = inject(AutomationWebsocketService);
+  private readonly crmApi = inject(CrmApiService);
   private readonly destroyRef = inject(DestroyRef);
 
   private readonly _status = signal<AutomationStatus | null>(null);
@@ -38,6 +41,13 @@ export class DashboardStore {
   private readonly _selectedId = signal<number | null>(null);
   private readonly _selectedDetail = signal<EmailProcess | null>(null);
   private readonly _detailLoading = signal(false);
+  private readonly _prospects = signal<Prospect[]>([]);
+  private readonly _prospectsLoading = signal(true);
+  private readonly _prospectSearch = signal('');
+  private readonly _selectedProspectId = signal<number | null>(null);
+  private readonly _selectedProspect = signal<ProspectDetail | null>(null);
+  private readonly _prospectLoading = signal(false);
+  private readonly searchTerms = new Subject<string>();
 
   readonly status = this._status.asReadonly();
   readonly integrations = this._integrations.asReadonly();
@@ -48,6 +58,12 @@ export class DashboardStore {
   readonly lastUpdated = this._lastUpdated.asReadonly();
   readonly detailLoading = this._detailLoading.asReadonly();
   readonly drawerOpen = computed(() => this._selectedId() !== null);
+  readonly prospects = this._prospects.asReadonly();
+  readonly prospectsLoading = this._prospectsLoading.asReadonly();
+  readonly prospectSearch = this._prospectSearch.asReadonly();
+  readonly selectedProspect = this._selectedProspect.asReadonly();
+  readonly prospectLoading = this._prospectLoading.asReadonly();
+  readonly prospectDrawerOpen = computed(() => this._selectedProspectId() !== null);
 
   readonly systemActive = computed(() => this._status()?.enabled ?? false);
   readonly connectedAccount = computed(() => this._status()?.googleAccount ?? null);
@@ -94,7 +110,58 @@ export class DashboardStore {
   /** Carga inicial por REST y conexión en vivo. Se llama una vez desde la page. */
   init(): void {
     this.load();
+    this.loadProspects();
     this.connectLive();
+    this.searchTerms
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap((term) => this.crmApi.getProspects(term).pipe(catchError(() => of(this._prospects())))),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((prospects) => this._prospects.set(prospects));
+  }
+
+  /** Lista de contactos CRM (con el filtro actual). */
+  loadProspects(): void {
+    this._prospectsLoading.set(true);
+    this.crmApi
+      .getProspects(this._prospectSearch())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (prospects) => {
+          this._prospects.set(prospects);
+          this._prospectsLoading.set(false);
+        },
+        error: () => this._prospectsLoading.set(false),
+      });
+  }
+
+  searchProspects(term: string): void {
+    this._prospectSearch.set(term);
+    this.searchTerms.next(term.trim());
+  }
+
+  openProspect(id: number): void {
+    this._selectedProspectId.set(id);
+    this._selectedProspect.set(null);
+    this._prospectLoading.set(true);
+    this.crmApi
+      .getProspect(id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (detail) => {
+          if (this._selectedProspectId() === id) {
+            this._selectedProspect.set(detail);
+          }
+          this._prospectLoading.set(false);
+        },
+        error: () => this._prospectLoading.set(false),
+      });
+  }
+
+  closeProspect(): void {
+    this._selectedProspectId.set(null);
   }
 
   load(): void {
@@ -167,6 +234,7 @@ export class DashboardStore {
         // Al volver de una desconexión se resincroniza por REST lo que pudo perderse.
         if (message.state === 'live' && previous === 'reconnecting') {
           this.refreshSummary();
+          this.loadProspects();
         }
       });
   }
@@ -180,6 +248,15 @@ export class DashboardStore {
     this._activeKey.set(key);
     this._lastUpdated.set(Date.now());
     this.patchEmailRow(event);
+
+    // Un contacto creado/actualizado por la automatización aparece en el listado CRM sin recargar la página.
+    if (event.stage === 'TOOL_COMPLETED' && event.toolName === CRM_TOOL) {
+      this.loadProspects();
+      const prospectId = event.metadata?.['prospectId'];
+      if (typeof prospectId === 'number' && this._selectedProspectId() === prospectId) {
+        this.openProspect(prospectId);
+      }
+    }
 
     if (FINAL_STAGES.includes(event.stage)) {
       if (event.stage === 'PROCESS_COMPLETED' || event.stage === 'PROCESS_IGNORED') {
@@ -224,6 +301,10 @@ export class DashboardStore {
       }
       if (event.aiSummary) {
         patch.aiSummary = event.aiSummary;
+      }
+      if (event.stage === 'TOOL_COMPLETED' && event.toolName === CRM_TOOL) {
+        patch.crmContactName = event.metadata?.['name'] as string | undefined;
+        patch.crmStatus = event.metadata?.['status'] as string | undefined;
       }
       if (event.stage === 'TOOL_COMPLETED' && event.toolName === JIRA_TOOL) {
         patch.jiraIssueKey = event.externalId;

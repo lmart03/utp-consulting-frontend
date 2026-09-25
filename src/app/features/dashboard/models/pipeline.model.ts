@@ -1,14 +1,16 @@
 import { ProcessedEmailStatus } from './processed-email.model';
+import { ProspectField, ProspectStatus } from './prospect.model';
 
 /** Modelos de vista del pipeline: se construyen desde eventos WebSocket o desde el detalle REST. */
-export type StepKey = 'gmail' | 'gemini' | 'jira' | 'calendar' | 'markRead' | 'done';
+export type StepKey = 'gmail' | 'gemini' | 'crm' | 'jira' | 'calendar' | 'markRead' | 'done';
 export type StepStatus = 'PENDING' | 'PROCESSING' | 'SUCCESS' | 'FAILED' | 'SKIPPED';
 
-export const STEP_ORDER: readonly StepKey[] = ['gmail', 'gemini', 'jira', 'calendar', 'markRead', 'done'];
+export const STEP_ORDER: readonly StepKey[] = ['gmail', 'gemini', 'crm', 'jira', 'calendar', 'markRead', 'done'];
 
 export const STEP_LABELS: Record<StepKey, string> = {
   gmail: 'Gmail',
   gemini: 'Gemini',
+  crm: 'CRM',
   jira: 'Jira',
   calendar: 'Calendar',
   markRead: 'Gmail leído',
@@ -39,6 +41,18 @@ export interface JiraResult {
   url?: string;
 }
 
+/** Contacto del CRM creado/actualizado por el correo. */
+export interface CrmResult {
+  prospectId?: number;
+  name?: string;
+  email?: string;
+  company?: string;
+  status?: ProspectStatus;
+  created?: boolean;
+  missingFields: ProspectField[];
+  inferredFields: ProspectField[];
+}
+
 export interface MeetingResult {
   start?: string;
   end?: string;
@@ -60,6 +74,7 @@ export interface EmailProcess {
   finalStatus?: ProcessedEmailStatus;
   steps: Record<StepKey, PipelineStep>;
   timeline: TimelineItem[];
+  crm?: CrmResult;
   jira?: JiraResult;
   meeting?: MeetingResult;
   /** true si se está siguiendo en tiempo real por WebSocket. */

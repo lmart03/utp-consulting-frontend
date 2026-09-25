@@ -7,9 +7,9 @@ import { TimelineItem } from '../../models/pipeline.model';
 
 const DOT_CLASSES: Record<TimelineItem['tone'], string> = {
   success: 'border-emerald-500 bg-emerald-500',
-  processing: 'border-emerald-400 bg-white',
+  processing: 'border-emerald-400 bg-surface',
   error: 'border-red-500 bg-red-500',
-  neutral: 'border-slate-300 bg-white',
+  neutral: 'border-slate-300 bg-surface',
 };
 
 @Component({
@@ -17,7 +17,7 @@ const DOT_CLASSES: Record<TimelineItem['tone'], string> = {
   imports: [LucideAngularModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section [class]="bare() ? '' : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'">
+    <section [class]="bare() ? '' : 'rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm sm:p-6'">
       <div class="flex items-center gap-2">
         <lucide-icon [img]="activityIcon" class="size-4 text-slate-400" />
         <h2 class="text-sm font-semibold text-slate-900">Actividad</h2>

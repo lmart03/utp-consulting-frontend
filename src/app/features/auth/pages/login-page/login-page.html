@@ -1,4 +1,7 @@
-<main class="flex min-h-dvh items-center justify-center bg-white px-4 py-12">
+<main class="relative flex min-h-dvh items-center justify-center bg-surface px-4 py-12">
+  <div class="absolute right-4 top-4">
+    <app-theme-toggle [dark]="theme.isDark()" (toggled)="theme.toggle()" />
+  </div>
   <div class="w-full max-w-sm animate-fade-in-up text-center">
     <div class="mx-auto flex size-12 items-center justify-center rounded-2xl bg-emerald-500 text-white shadow-sm">
       <lucide-icon [img]="logoIcon" class="size-6" />

@@ -1,0 +1,137 @@
+<section class="rounded-2xl border border-slate-200 bg-surface shadow-sm">
+  <header class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-6">
+    <div class="flex items-center gap-2">
+      <lucide-icon [img]="icons.Contact" class="size-4 text-slate-400" />
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">Contactos CRM</h2>
+        <p class="mt-0.5 text-xs text-slate-400">Creados y actualizados automáticamente desde los correos.</p>
+      </div>
+    </div>
+    <label class="relative w-full sm:w-64">
+      <span class="sr-only">Buscar contacto</span>
+      <lucide-icon [img]="icons.Search" class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+      <input
+        type="search"
+        [value]="search()"
+        (input)="onSearch($event)"
+        placeholder="Buscar nombre, email o empresa"
+        class="w-full rounded-lg border border-slate-200 bg-surface py-2 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 transition-colors duration-200 focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/15"
+      />
+    </label>
+  </header>
+
+  @if (loading() && prospects().length === 0) {
+    <div class="animate-pulse space-y-3 border-t border-slate-100 px-5 py-5 sm:px-6">
+      @for (row of [1, 2, 3]; track row) {
+        <div class="flex items-center gap-4">
+          <div class="size-8 rounded-full bg-slate-200"></div>
+          <div class="h-3 flex-1 rounded bg-slate-200"></div>
+          <div class="h-5 w-20 rounded-full bg-slate-200"></div>
+        </div>
+      }
+    </div>
+  } @else if (prospects().length === 0) {
+    <div class="flex flex-col items-center border-t border-slate-100 px-6 py-10 text-center">
+      <span class="flex size-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <lucide-icon [img]="icons.Contact" class="size-5" />
+      </span>
+      <p class="mt-3 text-sm font-semibold text-slate-900">{{ search() ? 'Sin resultados' : 'Aún no hay contactos' }}</p>
+      <p class="mt-1 max-w-sm text-sm text-slate-500">
+        {{ search() ? 'Prueba con otro nombre, email o empresa.' : 'Cuando Gemini detecte un prospecto en un correo, aparecerá aquí.' }}
+      </p>
+    </div>
+  } @else {
+    <!-- Desktop: tabla -->
+    <div class="hidden overflow-x-auto md:block">
+      <table class="w-full min-w-[820px] text-left text-sm">
+        <thead class="border-y border-slate-100 bg-slate-50/80 text-xs font-medium text-slate-500">
+          <tr>
+            <th class="px-6 py-3 font-medium">Contacto</th>
+            <th class="px-3 py-3 font-medium">Empresa</th>
+            <th class="px-3 py-3 font-medium">Teléfono</th>
+            <th class="px-3 py-3 font-medium">Estado</th>
+            <th class="px-3 py-3 text-right font-medium">Correos</th>
+            <th class="px-6 py-3 text-right font-medium">Último contacto</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          @for (prospect of prospects(); track prospect.id) {
+            <tr
+              tabindex="0"
+              (click)="selectProspect.emit(prospect.id)"
+              (keydown.enter)="selectProspect.emit(prospect.id)"
+              class="animate-fade-in-up cursor-pointer transition-colors duration-200 ease-out hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+            >
+              <td class="max-w-[280px] px-6 py-3.5">
+                <p class="truncate font-medium text-slate-900">
+                  {{ prospect.name || 'Sin nombre' }}
+                  @if (prospect.inferredFields.includes('name')) {
+                    <span class="ml-1 text-xs font-normal text-slate-400" title="Deducido del remitente">· inferido</span>
+                  }
+                </p>
+                <p class="truncate text-xs text-slate-500">{{ prospect.email }}</p>
+              </td>
+              <td class="max-w-[200px] px-3 py-3.5">
+                @if (prospect.company) {
+                  <p class="truncate text-slate-600">{{ prospect.company }}</p>
+                  @if (prospect.inferredFields.includes('company')) {
+                    <p class="text-xs text-slate-400">por dominio</p>
+                  }
+                } @else {
+                  <span class="text-slate-300">—</span>
+                }
+              </td>
+              <td class="whitespace-nowrap px-3 py-3.5 text-slate-600">
+                @if (prospect.phone) {
+                  {{ prospect.phone }}
+                } @else {
+                  <span class="text-slate-300">—</span>
+                }
+              </td>
+              <td class="px-3 py-3.5">
+                <div class="flex flex-col items-start gap-1">
+                  <app-prospect-status-badge [status]="prospect.status" />
+                  @if (prospect.missingFields.length > 0) {
+                    <span class="text-[11px] text-amber-600" [title]="'Falta: ' + missingText(prospect)">Datos incompletos</span>
+                  }
+                </div>
+              </td>
+              <td class="px-3 py-3.5 text-right tabular-nums text-slate-500">{{ prospect.interactionCount }}</td>
+              <td class="whitespace-nowrap px-6 py-3.5 text-right tabular-nums text-slate-500">
+                {{ formatShortDateTime(prospect.lastContactAt) || '—' }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Mobile: tarjetas -->
+    <ul class="divide-y divide-slate-100 border-t border-slate-100 md:hidden">
+      @for (prospect of prospects(); track prospect.id) {
+        <li>
+          <button
+            type="button"
+            (click)="selectProspect.emit(prospect.id)"
+            class="flex w-full animate-fade-in-up items-center gap-3 px-5 py-4 text-left transition-colors duration-200 hover:bg-slate-50"
+          >
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-2">
+                <p class="truncate text-sm font-medium text-slate-900">{{ prospect.name || prospect.email }}</p>
+                <app-prospect-status-badge [status]="prospect.status" />
+              </div>
+              <p class="mt-0.5 truncate text-xs text-slate-500">{{ prospect.email }}</p>
+              <p class="mt-1 truncate text-xs text-slate-400">
+                {{ prospect.company || 'Sin empresa' }} · {{ prospect.interactionCount }} correo(s)
+                @if (prospect.missingFields.length > 0) {
+                  · <span class="text-amber-600">datos incompletos</span>
+                }
+              </p>
+            </div>
+            <lucide-icon [img]="icons.ChevronRight" class="size-4 shrink-0 text-slate-300" />
+          </button>
+        </li>
+      }
+    </ul>
+  }
+</section>

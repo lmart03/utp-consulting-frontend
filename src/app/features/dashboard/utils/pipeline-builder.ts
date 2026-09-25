@@ -3,7 +3,9 @@ import { companyFromSender } from '@shared/utils/email-address';
 
 import { AutomationEvent, FINAL_STAGES } from '../models/automation-event.model';
 import { CALENDAR_TOOL, CRM_TOOL, EmailAction, JIRA_TOOL } from '../models/email-action.model';
+import { ProspectField, ProspectStatus } from '../models/prospect.model';
 import {
+  CrmResult,
   EmailProcess,
   MeetingResult,
   PipelineStep,
@@ -45,6 +47,9 @@ export function createProcess(event: AutomationEvent): EmailProcess {
 }
 
 function toolStep(toolName?: string): StepKey | null {
+  if (toolName === CRM_TOOL) {
+    return 'crm';
+  }
   if (toolName === JIRA_TOOL) {
     return 'jira';
   }
@@ -60,6 +65,51 @@ function meetingText(meeting?: MeetingResult): string | undefined {
   }
   return `${formatDay(meeting.start)} · ${formatTimeRange(meeting.start, meeting.end)}`;
 }
+
+function fieldList(value: unknown): ProspectField[] {
+  return Array.isArray(value) ? (value.filter((v) => v === 'name' || v === 'company' || v === 'phone') as ProspectField[]) : [];
+}
+
+/** Contacto CRM desde la metadata del evento o desde el ProspectResponse guardado como responsePayload. */
+function crmFrom(source: Record<string, unknown> | undefined, prospectId?: number): CrmResult | undefined {
+  if (!source) {
+    return undefined;
+  }
+  const id = typeof source['prospectId'] === 'number' ? (source['prospectId'] as number) : typeof source['id'] === 'number' ? (source['id'] as number) : prospectId;
+  return {
+    prospectId: id,
+    name: typeof source['name'] === 'string' ? (source['name'] as string) : undefined,
+    email: typeof source['email'] === 'string' ? (source['email'] as string) : undefined,
+    company: typeof source['company'] === 'string' ? (source['company'] as string) : undefined,
+    status: typeof source['status'] === 'string' ? (source['status'] as ProspectStatus) : undefined,
+    created: typeof source['created'] === 'boolean' ? (source['created'] as boolean) : undefined,
+    missingFields: fieldList(source['missingFields']),
+    inferredFields: fieldList(source['inferredFields']),
+  };
+}
+
+function parseJson(value?: string): Record<string, unknown> | undefined {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function crmDetail(crm: CrmResult): string {
+  const who = crm.name ?? crm.email ?? 'Contacto';
+  return crm.created === undefined ? who : `${who} · ${crm.created ? 'nuevo' : 'actualizado'}`;
+}
+
+const TOOL_WORKING_TEXT: Record<'crm' | 'jira' | 'calendar', string> = {
+  crm: 'Actualizando contacto',
+  jira: 'Creando ticket',
+  calendar: 'Agendando reunión',
+};
 
 function numberMeta(event: AutomationEvent, key: string): number | undefined {
   const value = event.metadata?.[key];
@@ -139,7 +189,7 @@ export function applyEvent(current: EmailProcess, event: AutomationEvent): Email
       if (key) {
         setStep(key, {
           status: 'PROCESSING',
-          detail: key === 'jira' ? 'Creando ticket' : 'Agendando reunión',
+          detail: TOOL_WORKING_TEXT[key as 'crm' | 'jira' | 'calendar'],
           error: undefined,
           attempt: numberMeta(event, 'attempt'),
           maxAttempts: numberMeta(event, 'maxAttempts'),
@@ -150,7 +200,14 @@ export function applyEvent(current: EmailProcess, event: AutomationEvent): Email
 
     case 'TOOL_COMPLETED': {
       const key = toolStep(event.toolName);
-      if (key === 'jira') {
+      if (key === 'crm') {
+        next.crm = crmFrom(event.metadata, event.externalId ? Number(event.externalId) : undefined);
+        setStep('crm', { status: 'SUCCESS', detail: next.crm ? crmDetail(next.crm) : 'Contacto registrado', error: undefined });
+        log(
+          next.crm?.created === false ? `Contacto CRM actualizado: ${next.crm?.name ?? ''}`.trim() : `Contacto CRM creado: ${next.crm?.name ?? ''}`.trim(),
+          'success',
+        );
+      } else if (key === 'jira') {
         next.jira = { key: event.externalId ?? 'Ticket', url: event.externalUrl };
         setStep('jira', { status: 'SUCCESS', detail: event.externalId, error: undefined });
         log(`Ticket ${event.externalId ?? ''} creado`.replace('  ', ' '), 'success');
@@ -181,8 +238,6 @@ export function applyEvent(current: EmailProcess, event: AutomationEvent): Email
       const key = toolStep(event.toolName);
       if (key) {
         setStep(key, { status: 'SKIPPED', detail: 'Omitido' });
-      } else if (event.toolName === CRM_TOOL) {
-        log('CRM omitido (no implementado aún)', 'neutral');
       }
       break;
     }
@@ -253,7 +308,7 @@ function backfillEarlierSteps(process: EmailProcess, event: AutomationEvent): vo
 
 /** Al terminar, Jira/Calendar que Gemini no pidió quedan como "no solicitado". */
 function skipPendingTools(process: EmailProcess, timestamp: string): void {
-  for (const key of ['jira', 'calendar'] as const) {
+  for (const key of ['crm', 'jira', 'calendar'] as const) {
     if (process.steps[key].status === 'PENDING') {
       process.steps[key] = { key, status: 'SKIPPED', detail: 'No solicitado', timestamp };
     }
@@ -270,6 +325,7 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
   const steps = emptySteps();
   const timeline: TimelineItem[] = [];
   const finished = email.status !== 'PROCESSING';
+  const crmAction = actions.find((a) => a.toolName === CRM_TOOL);
   const jiraAction = actions.find((a) => a.toolName === JIRA_TOOL);
   const calendarAction = actions.find((a) => a.toolName === CALENDAR_TOOL);
   const analyzed = !!email.aiSummary || actions.length > 0 || email.status === 'IGNORED';
@@ -294,7 +350,9 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
     email.meetingStart || calendarAction?.externalUrl
       ? { start: email.meetingStart, end: email.meetingEnd, url: calendarAction?.externalUrl }
       : undefined;
+  const crm = crmAction?.status === 'SUCCESS' ? crmFrom(parseJson(crmAction.responsePayload), Number(crmAction.externalId)) : undefined;
   const toolEntries: [StepKey, EmailAction | undefined][] = [
+    ['crm', crmAction],
     ['jira', jiraAction],
     ['calendar', calendarAction],
   ];
@@ -309,7 +367,17 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
       key,
       status,
       timestamp: action.updatedAt,
-      detail: success ? (key === 'jira' ? action.externalId : meetingText(meeting) ?? 'Evento creado') : undefined,
+      detail: success
+        ? key === 'crm'
+          ? crm
+            ? crmDetail(crm)
+            : 'Contacto registrado'
+          : key === 'jira'
+            ? action.externalId
+            : meetingText(meeting) ?? 'Evento creado'
+        : status === 'SKIPPED'
+          ? action.errorMessage ?? 'Omitido'
+          : undefined,
       error: status === 'FAILED' ? action.errorMessage ?? `No se pudo completar ${STEP_LABELS[key]}.` : undefined,
       attempt: action.attemptCount || undefined,
       nextRetryAt: status === 'FAILED' ? email.nextRetryAt : undefined,
@@ -318,7 +386,7 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
       timeline.push({
         id: `${key}-${action.id}`,
         timestamp: action.updatedAt,
-        text: key === 'jira' ? `Ticket ${action.externalId} creado` : 'Reunión creada',
+        text: key === 'crm' ? `Contacto CRM registrado: ${crm?.name ?? ''}`.trim() : key === 'jira' ? `Ticket ${action.externalId} creado` : 'Reunión creada',
         tone: 'success',
       });
     } else if (status === 'FAILED') {
@@ -373,6 +441,7 @@ export function processFromDetail(detail: ProcessedEmailDetail): EmailProcess {
     finalStatus: finished ? email.status : undefined,
     steps,
     timeline,
+    crm,
     jira: jiraAction?.status === 'SUCCESS' && jiraAction.externalId ? { key: jiraAction.externalId, url: jiraAction.externalUrl } : undefined,
     meeting: calendarAction?.status === 'SUCCESS' ? meeting : undefined,
     live: false,

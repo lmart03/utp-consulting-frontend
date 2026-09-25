@@ -3,6 +3,7 @@ import {
   CalendarDays,
   Check,
   CircleCheck,
+  Contact,
   LucideAngularModule,
   LucideIconData,
   Mail,
@@ -23,6 +24,7 @@ export type ConnectorState = 'none' | 'pending' | 'active' | 'done';
 const STEP_ICONS: Record<StepKey, LucideIconData> = {
   gmail: Mail,
   gemini: Sparkles,
+  crm: Contact,
   jira: Ticket,
   calendar: CalendarDays,
   markRead: MailCheck,
@@ -83,7 +85,7 @@ export class PipelineStepComponent {
       case 'SKIPPED':
         return `${base} border-slate-200 bg-slate-100 text-slate-400`;
       default:
-        return `${base} border-slate-200 bg-white text-slate-400`;
+        return `${base} border-slate-200 bg-surface text-slate-400`;
     }
   });
 

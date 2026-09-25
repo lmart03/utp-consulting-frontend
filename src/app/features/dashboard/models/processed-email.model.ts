@@ -22,6 +22,9 @@ export interface ProcessedEmail {
   jiraIssueKey?: string;
   meetingStart?: string;
   meetingEnd?: string;
+  crmProspectId?: number;
+  crmContactName?: string;
+  crmStatus?: string;
   createdAt: string;
   updatedAt: string;
 }

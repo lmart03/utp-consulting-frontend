@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { LogOut, LucideAngularModule, Workflow } from 'lucide-angular';
 
+import { ThemeToggleComponent } from '@shared/components/theme-toggle/theme-toggle';
+
 import { LiveConnectionState } from '../../models/automation-status.model';
 
 @Component({
   selector: 'app-dashboard-header',
-  imports: [LucideAngularModule],
+  imports: [LucideAngularModule, ThemeToggleComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './dashboard-header.html',
 })
@@ -14,7 +16,9 @@ export class DashboardHeaderComponent {
   readonly userEmail = input<string | null>(null);
   readonly systemActive = input(false);
   readonly connection = input<LiveConnectionState>('connecting');
+  readonly darkMode = input(false);
   readonly logout = output<void>();
+  readonly themeToggled = output<void>();
 
   protected readonly logoIcon = Workflow;
   protected readonly logoutIcon = LogOut;

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import { CalendarDays, LucideAngularModule, Mail, Plug, Sparkles, Ticket } from 'lucide-angular';
+import { CalendarDays, Contact, LucideAngularModule, Mail, Plug, Sparkles, Ticket } from 'lucide-angular';
 
 import { IntegrationsStatus } from '../../models/automation-status.model';
 
@@ -8,7 +8,7 @@ import { IntegrationsStatus } from '../../models/automation-status.model';
   imports: [LucideAngularModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section class="rounded-2xl border border-slate-200 bg-surface p-5 shadow-sm">
       <div class="flex items-center gap-2">
         <lucide-icon [img]="plugIcon" class="size-4 text-slate-400" />
         <h2 class="text-sm font-semibold text-slate-900">Integraciones</h2>
@@ -61,7 +61,7 @@ export class IntegrationsStatusComponent {
     if (!status) {
       return null;
     }
-    return [
+    const items = [
       { name: 'Gmail', icon: Mail, ok: status.gmail.connected, label: status.gmail.connected ? 'Conectado' : 'Sin sesión', detail: status.gmail.account },
       { name: 'Gemini', icon: Sparkles, ok: status.gemini.configured, label: status.gemini.configured ? 'Configurado' : 'Sin API key', detail: status.gemini.model },
       {
@@ -79,5 +79,9 @@ export class IntegrationsStatusComponent {
         detail: status.calendar.timeZone,
       },
     ];
+    if (status.crm) {
+      items.push({ name: 'CRM', icon: Contact, ok: status.crm.configured, label: status.crm.configured ? 'Activo' : 'Inactivo', detail: 'PostgreSQL propio' });
+    }
+    return items;
   });
 }

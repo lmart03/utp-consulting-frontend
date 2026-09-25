@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
-/* Tokens mínimos: tipografía y animaciones suaves reutilizadas por la UI. Todo lo demás es Tailwind. */
+/* Modo oscuro por clase: <html class="dark"> (ThemeService). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tokens mínimos: tipografía, superficie y animaciones suaves. Todo lo demás es Tailwind. */
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* Fondo de cards, header y drawers (bg-surface). */
+  --color-surface: #ffffff;
 
   --animate-fade-in-up: fade-in-up 300ms ease-out both;
   --animate-fade-in: fade-in 300ms ease-out both;
@@ -33,12 +39,51 @@
   }
 }
 
+/*
+ * Modo oscuro: las utilidades de Tailwind 4 leen variables CSS, así que basta con redefinir la paleta neutra
+ * (slate), la superficie y los tintes suaves. El verde principal (500/600) y text-white no cambian.
+ */
+:root.dark {
+  color-scheme: dark;
+
+  --color-surface: #111a2e;
+
+  --color-slate-50: #0b1120;
+  --color-slate-100: #1a2437;
+  --color-slate-200: #243049;
+  --color-slate-300: #36445e;
+  --color-slate-400: #7d8ba3;
+  --color-slate-500: #98a5ba;
+  --color-slate-600: #b4bfd0;
+  --color-slate-700: #cbd4e1;
+  --color-slate-800: #e1e7ef;
+  --color-slate-900: #f1f5f9;
+  --color-slate-950: #f8fafc;
+
+  --color-emerald-50: rgb(16 185 129 / 0.12);
+  --color-emerald-100: rgb(16 185 129 / 0.2);
+  --color-emerald-200: rgb(16 185 129 / 0.32);
+  --color-emerald-300: rgb(52 211 153 / 0.55);
+  --color-emerald-700: #6ee7b7;
+
+  --color-red-50: rgb(239 68 68 / 0.12);
+  --color-red-100: rgb(239 68 68 / 0.22);
+  --color-red-600: #f87171;
+  --color-red-700: #fca5a5;
+
+  --color-amber-50: rgb(245 158 11 / 0.12);
+  --color-amber-100: rgb(245 158 11 / 0.22);
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fcd34d;
+  --color-amber-800: #fde68a;
+}
+
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
   }
   body {
-    @apply bg-slate-50 font-sans text-slate-900;
+    @apply bg-slate-50 font-sans text-slate-900 transition-colors duration-300;
   }
 }
 

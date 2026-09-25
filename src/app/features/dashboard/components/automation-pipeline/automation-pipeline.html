@@ -70,7 +70,7 @@
     }
 
     <!-- Resumen IA -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4" [class.mt-4]="!isDrawer()">
+    <div class="rounded-xl border border-slate-200 bg-surface p-4" [class.mt-4]="!isDrawer()">
       <div class="flex items-center gap-2">
         <span class="flex size-6 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
           <lucide-icon [img]="icons.Sparkles" class="size-3.5" />
@@ -97,8 +97,38 @@
     </ol>
 
     <!-- Resultados: Jira y Calendar -->
-    @if (p.jira || p.meeting) {
-      <div [class]="isDrawer() ? 'mt-6 grid gap-3' : 'mt-6 grid gap-3 sm:grid-cols-2'">
+    @if (p.crm || p.jira || p.meeting) {
+      <div [class]="resultsGridClass()">
+        @if (p.crm; as crm) {
+          <div class="flex animate-fade-in-up items-start gap-3 rounded-xl border border-slate-200 p-4 transition-shadow duration-200 hover:shadow-sm">
+            <span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <lucide-icon [img]="icons.Contact" class="size-5" />
+            </span>
+            <div class="min-w-0 flex-1">
+              <p class="text-xs text-slate-400">
+                Contacto CRM · {{ crm.created === false ? 'actualizado' : crm.created ? 'nuevo' : 'registrado' }}
+              </p>
+              <p class="truncate text-sm font-semibold text-slate-900" [title]="crm.email ?? ''">{{ crm.name || crm.email || 'Contacto' }}</p>
+              <p class="truncate text-xs text-slate-500">
+                {{ crm.company || 'Empresa no identificada' }}
+                @if (crm.inferredFields.includes('company')) {
+                  <span class="text-slate-400">(por dominio)</span>
+                }
+              </p>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                @if (crm.status) {
+                  <app-prospect-status-badge [status]="crm.status" />
+                }
+                @if (crm.missingFields.length > 0) {
+                  <span
+                    class="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                    [title]="'El correo no incluía: ' + missingText(crm.missingFields)"
+                  >Falta {{ missingText(crm.missingFields) }}</span>
+                }
+              </div>
+            </div>
+          </div>
+        }
         @if (p.jira; as jira) {
           <div class="flex animate-fade-in-up items-center gap-3 rounded-xl border border-slate-200 p-4 transition-shadow duration-200 hover:shadow-sm">
             <span class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
@@ -221,7 +251,7 @@
     <ng-container [ngTemplateOutlet]="content" />
   }
 } @else {
-  <section class="rounded-2xl border border-slate-200 bg-white shadow-sm">
+  <section class="rounded-2xl border border-slate-200 bg-surface shadow-sm">
     <header class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6">
       <div class="flex items-center gap-2">
         <span class="relative flex size-2">

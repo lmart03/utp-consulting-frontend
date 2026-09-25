@@ -27,7 +27,14 @@ describe('pipeline-builder', () => {
         detectedCompany: 'NovaTech',
         metadata: { toolsDetected: 3 },
       }),
-      event({ stage: 'TOOL_SKIPPED', status: 'SKIPPED', toolName: 'actualizar_contacto_crm' }),
+      event({ stage: 'TOOL_STARTED', status: 'PROCESSING', toolName: 'actualizar_contacto_crm' }),
+      event({
+        stage: 'TOOL_COMPLETED',
+        status: 'SUCCESS',
+        toolName: 'actualizar_contacto_crm',
+        externalId: '5',
+        metadata: { prospectId: 5, name: 'Ana Torres', email: 'ana@novatech.com', company: 'NovaTech', status: 'MEETING_SCHEDULED', created: true, missingFields: ['phone'], inferredFields: [] },
+      }),
       event({ stage: 'TOOL_STARTED', status: 'PROCESSING', toolName: 'crear_ticket_jira', metadata: { attempt: 1, maxAttempts: 4 } }),
       event({ stage: 'TOOL_COMPLETED', status: 'SUCCESS', toolName: 'crear_ticket_jira', externalId: 'SCRUM-14', externalUrl: 'https://jira/SCRUM-14' }),
       event({ stage: 'TOOL_STARTED', status: 'PROCESSING', toolName: 'agendar_reunion_google_calendar' }),
@@ -46,7 +53,9 @@ describe('pipeline-builder', () => {
     expect(process.processedEmailId).toBe(7);
     expect(process.company).toBe('NovaTech');
     expect(process.aiSummary).toBe('NovaTech pide reunión.');
-    expect(Object.values(process.steps).map((s) => s.status)).toEqual(['SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS']);
+    expect(Object.values(process.steps).map((s) => s.status)).toEqual(['SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS', 'SUCCESS']);
+    expect(process.crm).toMatchObject({ prospectId: 5, name: 'Ana Torres', status: 'MEETING_SCHEDULED', created: true, missingFields: ['phone'] });
+    expect(process.steps.crm.detail).toBe('Ana Torres · nuevo');
     expect(process.steps.gemini.detail).toBe('3 acciones detectadas');
     expect(process.jira).toEqual({ key: 'SCRUM-14', url: 'https://jira/SCRUM-14' });
     expect(process.meeting?.start).toBe('2026-09-26T15:00:00-05:00');
@@ -57,7 +66,7 @@ describe('pipeline-builder', () => {
       'Correo detectado',
       'Gemini comenzó el análisis',
       'Gemini detectó 3 acciones',
-      'CRM omitido (no implementado aún)',
+      'Contacto CRM creado: Ana Torres',
       'Ticket SCRUM-14 creado',
       'Reunión creada',
       'Correo marcado como leído',
@@ -157,7 +166,16 @@ describe('pipeline-builder', () => {
       actions: [
         { id: 1, toolName: 'crear_ticket_jira', status: 'SUCCESS', externalId: 'SCRUM-6', externalUrl: 'https://jira/SCRUM-6', attemptCount: 1, createdAt: '2026-09-25T18:00:03Z', updatedAt: '2026-09-25T18:00:04Z' },
         { id: 2, toolName: 'agendar_reunion_google_calendar', status: 'SUCCESS', externalId: 'evt', externalUrl: 'https://cal/evt', attemptCount: 1, createdAt: '2026-09-25T18:00:05Z', updatedAt: '2026-09-25T18:00:06Z' },
-        { id: 3, toolName: 'actualizar_contacto_crm', status: 'SKIPPED', attemptCount: 0, createdAt: '2026-09-25T18:00:03Z', updatedAt: '2026-09-25T18:00:03Z' },
+        {
+          id: 3,
+          toolName: 'actualizar_contacto_crm',
+          status: 'SUCCESS',
+          externalId: '9',
+          responsePayload: JSON.stringify({ id: 9, name: 'Ana Torres', email: 'ana@novatech.com', status: 'INTERESTED', missingFields: ['phone'], inferredFields: ['company'] }),
+          attemptCount: 1,
+          createdAt: '2026-09-25T18:00:02Z',
+          updatedAt: '2026-09-25T18:00:02Z',
+        },
       ],
     };
 
@@ -167,6 +185,7 @@ describe('pipeline-builder', () => {
     expect(process.company).toBe('Novatech');
     expect(process.jira).toEqual({ key: 'SCRUM-6', url: 'https://jira/SCRUM-6' });
     expect(process.meeting?.url).toBe('https://cal/evt');
+    expect(process.crm).toMatchObject({ prospectId: 9, name: 'Ana Torres', missingFields: ['phone'], inferredFields: ['company'] });
     expect(process.live).toBe(false);
   });
 });

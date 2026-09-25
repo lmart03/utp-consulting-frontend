@@ -18,7 +18,7 @@ const ICONS: Record<KpiKind, LucideIconData> = {
     <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       @for (kpi of kpis(); track kpi.kind) {
         <article
-          class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md sm:p-5"
+          class="rounded-2xl border border-slate-200 bg-surface p-4 shadow-sm transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md sm:p-5"
         >
           <div class="flex items-start justify-between gap-2">
             <p class="text-sm text-slate-500">{{ kpi.label }}</p>

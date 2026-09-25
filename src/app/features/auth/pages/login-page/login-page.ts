@@ -3,14 +3,17 @@ import { Router } from '@angular/router';
 import { CalendarDays, LucideAngularModule, Mail, Sparkles, Ticket, Workflow } from 'lucide-angular';
 
 import { AuthService } from '@core/services/auth.service';
+import { ThemeService } from '@core/services/theme.service';
+import { ThemeToggleComponent } from '@shared/components/theme-toggle/theme-toggle';
 
 @Component({
   selector: 'app-login-page',
-  imports: [LucideAngularModule],
+  imports: [LucideAngularModule, ThemeToggleComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './login-page.html',
 })
 export class LoginPage {
+  protected readonly theme = inject(ThemeService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
